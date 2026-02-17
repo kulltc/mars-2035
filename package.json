@@ -1,0 +1,5 @@
+{
+  "name": "mars-2035",
+  "private": true,
+  "workspaces": ["shared", "server", "client"]
+}

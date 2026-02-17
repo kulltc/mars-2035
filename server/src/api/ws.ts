@@ -1,0 +1,47 @@
+import type { FastifyInstance } from "fastify";
+import { toMapKey, type GameEvent } from "@mars-2035/shared";
+import type { WorldStore } from "../store/WorldStore.js";
+
+export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
+  app.get<{ Params: { dx: string; dy: string; mx: string; my: string } }>(
+    "/ws/map/:dx/:dy/:mx/:my",
+    { websocket: true },
+    (socket, req) => {
+      const { dx, dy, mx, my } = req.params;
+      const mapKey = toMapKey(Number(dx), Number(dy), Number(mx), Number(my));
+
+      console.log(`WS client connected to map ${mapKey}`);
+
+      // Send initial snapshot
+      const tiles = store.serializeTiles(mapKey);
+      const buildings = store.getBuildingsByMap(mapKey);
+      socket.send(
+        JSON.stringify({
+          type: "snapshot",
+          map_key: mapKey,
+          tick: store.tick,
+          tiles,
+          buildings,
+        })
+      );
+
+      // Subscribe to map events
+      const unsub = store.subscribe(mapKey, (events: GameEvent[]) => {
+        if (socket.readyState === 1) {
+          socket.send(
+            JSON.stringify({
+              type: "events",
+              map_key: mapKey,
+              events,
+            })
+          );
+        }
+      });
+
+      socket.on("close", () => {
+        console.log(`WS client disconnected from map ${mapKey}`);
+        unsub();
+      });
+    }
+  );
+}
