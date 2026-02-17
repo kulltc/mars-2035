@@ -1,29 +1,75 @@
 import Fastify from "fastify";
 import fastifyWebSocket from "@fastify/websocket";
 import fastifyCors from "@fastify/cors";
+import fastifyJwt from "@fastify/jwt";
+import { DISTRICTS_X, DISTRICTS_Y, toDistrictKey } from "@mars-2035/shared";
 import { WorldStore } from "./store/WorldStore.js";
 import { TickRunner } from "./tick/TickRunner.js";
 import { registerRoutes } from "./api/routes.js";
 import { registerWebSocket } from "./api/ws.js";
+import { registerAuthRoutes, setPlayerCounter } from "./api/auth.js";
+import { setBuildingCounter } from "./systems/building.js";
+import { recalculateDistrict } from "./systems/influence.js";
+import { initDb, loadLatestSnapshot } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
+const JWT_SECRET = process.env.JWT_SECRET ?? "mars-2035-dev-secret";
+const SNAPSHOT_INTERVAL_TICKS = Number(process.env.SNAPSHOT_INTERVAL_TICKS ?? 1);
 
 async function main() {
   const app = Fastify({ logger: false });
 
   await app.register(fastifyCors, { origin: true });
   await app.register(fastifyWebSocket);
+  await app.register(fastifyJwt, { secret: JWT_SECRET });
 
-  // Initialize world
-  const store = new WorldStore(42);
-  console.log("World seeded with 4 districts, 100 maps");
+  // Initialize database
+  await initDb();
+
+  // Initialize world — restore from snapshot if available
+  let store: WorldStore;
+  const snapshot = await loadLatestSnapshot("mars-alpha");
+
+  if (snapshot) {
+    store = WorldStore.fromSnapshot(snapshot, 42);
+
+    // Recalculate districts from restored buildings
+    for (let dx = 0; dx < DISTRICTS_X; dx++) {
+      for (let dy = 0; dy < DISTRICTS_Y; dy++) {
+        recalculateDistrict(store, toDistrictKey(dx, dy));
+      }
+    }
+
+    // Restore building counter from max building ID (bld_N)
+    let maxBld = 0;
+    for (const id of store.buildings.keys()) {
+      const n = parseInt(id.replace("bld_", ""), 10);
+      if (n > maxBld) maxBld = n;
+    }
+    setBuildingCounter(maxBld);
+
+    // Restore player counter from max player ID (plr_<ts>_N)
+    let maxPlr = 0;
+    for (const id of store.players.keys()) {
+      const parts = id.split("_");
+      const n = parseInt(parts[parts.length - 1], 10);
+      if (n > maxPlr) maxPlr = n;
+    }
+    setPlayerCounter(maxPlr);
+
+    console.log(`Restored from tick ${snapshot.tick} (${store.players.size} players, ${store.buildings.size} buildings)`);
+  } else {
+    store = new WorldStore(42);
+    console.log("World seeded with 4 districts, 100 maps");
+  }
 
   // Register routes
+  registerAuthRoutes(app, store);
   registerRoutes(app, store);
   registerWebSocket(app, store);
 
   // Start tick runner
-  const ticker = new TickRunner(store);
+  const ticker = new TickRunner(store, { snapshotIntervalTicks: SNAPSHOT_INTERVAL_TICKS });
   ticker.start();
 
   // Start server

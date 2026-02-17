@@ -75,7 +75,7 @@ export function MapView() {
           x,
           y,
         };
-        await submitCommand(player.entity_id, "place_building", {
+        await submitCommand("place_building", {
           building_class: buildMode,
           location,
         });

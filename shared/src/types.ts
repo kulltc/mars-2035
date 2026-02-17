@@ -143,6 +143,13 @@ export interface Command {
   submitted_at: number;
 }
 
+// ── Auth ──
+
+export interface AuthResponse {
+  token: string;
+  player: Player & { buildings: Building[] };
+}
+
 // ── World ──
 
 export interface WorldMeta {

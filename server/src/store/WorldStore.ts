@@ -19,6 +19,7 @@ import {
   toDistrictKey,
 } from "@mars-2035/shared";
 import { generateWorld } from "../seed/worldGen.js";
+import type { WorldSnapshotPayload } from "../db.js";
 
 export class WorldStore {
   readonly worldId = "mars-alpha";
@@ -146,6 +147,37 @@ export class WorldStore {
     if (subs) {
       for (const cb of subs) cb(events);
     }
+  }
+
+  // ── Snapshot persistence ──
+
+  toSnapshot(): WorldSnapshotPayload {
+    const players: Record<string, Player> = {};
+    for (const [k, v] of this.players) players[k] = v;
+    const buildings: Record<string, Building> = {};
+    for (const [k, v] of this.buildings) buildings[k] = v;
+    return { tick: this.tick, seq: this.seq, players, buildings };
+  }
+
+  static fromSnapshot(payload: WorldSnapshotPayload, seed: number): WorldStore {
+    const store = new WorldStore(seed);
+    store.tick = payload.tick;
+    store.seq = payload.seq;
+
+    store.players = new Map(Object.entries(payload.players));
+    store.buildings = new Map(Object.entries(payload.buildings));
+
+    // Re-link buildings to tiles
+    for (const building of store.buildings.values()) {
+      const mapTiles = store.tiles.get(building.map_key as MapKey);
+      if (mapTiles) {
+        const tk = tileKey(building.location.x, building.location.y);
+        const tile = mapTiles.get(tk);
+        if (tile) tile.building_id = building.entity_id;
+      }
+    }
+
+    return store;
   }
 
   // ── Serialization helpers for API ──

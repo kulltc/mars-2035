@@ -1,14 +1,14 @@
 import { create } from "zustand";
 import type {
-  Player,
-  Building,
-  Tile,
-  GameEvent,
-  DistrictState,
-  WorldMeta,
+  Player, Building, Tile, GameEvent, DistrictState, WorldMeta,
 } from "@mars-2035/shared";
 
 export interface GameState {
+  // Auth
+  token: string | null;
+  setToken: (token: string) => void;
+  logout: () => void;
+
   // World
   world: WorldMeta | null;
   setWorld: (world: WorldMeta) => void;
@@ -48,6 +48,16 @@ export interface GameState {
 }
 
 export const useGameStore = create<GameState>((set) => ({
+  token: localStorage.getItem("mars_token"),
+  setToken: (token) => {
+    localStorage.setItem("mars_token", token);
+    set({ token });
+  },
+  logout: () => {
+    localStorage.removeItem("mars_token");
+    set({ token: null, player: null });
+  },
+
   world: null,
   setWorld: (world) => set({ world }),
 

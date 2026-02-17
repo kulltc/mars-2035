@@ -1,14 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import {
   type Command,
-  type Player,
-  STARTING_MONEY,
   toMapKey,
   toDistrictKey,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 
-let playerCounter = 0;
 let commandCounter = 0;
 
 export function registerRoutes(app: FastifyInstance, store: WorldStore) {
@@ -29,8 +26,21 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
     }
   );
 
-  // GET /api/player/:id
+  // GET /api/player/:id (authenticated — own player only)
   app.get<{ Params: { id: string } }>("/api/player/:id", async (req, reply) => {
+    try {
+      await req.jwtVerify();
+    } catch {
+      reply.code(401);
+      return { error: "Unauthorized" };
+    }
+
+    const { playerId } = req.user as { userId: string; playerId: string };
+    if (req.params.id !== playerId) {
+      reply.code(403);
+      return { error: "Forbidden" };
+    }
+
     const player = store.players.get(req.params.id);
     if (!player) {
       reply.code(404);
@@ -54,34 +64,21 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
     }
   );
 
-  // POST /api/player
-  app.post<{ Body: { name: string } }>("/api/player", async (req) => {
-    const { name } = req.body;
-    const entityId = `plr_${++playerCounter}`;
-    const player: Player = {
-      entity_id: entityId,
-      name,
-      status: "active",
-      map_accounts: {},
-    };
-    store.players.set(entityId, player);
-    store.pushEvent("player_registered", { player_id: entityId, name });
-
-    // Give starting money on map 0:0:0:0
-    const startMap = toMapKey(0, 0, 0, 0);
-    player.map_accounts[startMap] = {
-      assets: { money: STARTING_MONEY },
-    };
-
-    return player;
-  });
-
-  // POST /api/command
-  app.post<{ Body: { player_id: string; type: string; data: Record<string, unknown> } }>(
+  // POST /api/command (authenticated — player_id from JWT)
+  app.post<{ Body: { type: string; data: Record<string, unknown> } }>(
     "/api/command",
     async (req, reply) => {
-      const { player_id, type, data } = req.body;
-      const player = store.players.get(player_id);
+      try {
+        await req.jwtVerify();
+      } catch {
+        reply.code(401);
+        return { error: "Unauthorized" };
+      }
+
+      const { playerId } = req.user as { userId: string; playerId: string };
+      const { type, data } = req.body;
+
+      const player = store.players.get(playerId);
       if (!player) {
         reply.code(404);
         return { error: "Player not found" };
@@ -89,7 +86,7 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
 
       const command: Command = {
         id: `cmd_${++commandCounter}`,
-        player_id,
+        player_id: playerId,
         type: type as Command["type"],
         data,
         submitted_at: Date.now(),
@@ -108,7 +105,6 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
         const sinceSeq = since_seq ? Number(since_seq) : 0;
         return store.getEventsSince(map_key, sinceSeq);
       }
-      // Return last 100 events if no filter
       return store.events.slice(-100);
     }
   );

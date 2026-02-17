@@ -11,6 +11,10 @@ import type { WorldStore } from "../store/WorldStore.js";
 
 let buildingCounter = 0;
 
+export function setBuildingCounter(n: number) {
+  buildingCounter = n;
+}
+
 export function placeBuilding(
   store: WorldStore,
   player: Player,

@@ -3,10 +3,29 @@ import { toMapKey, type GameEvent } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 
 export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
-  app.get<{ Params: { dx: string; dy: string; mx: string; my: string } }>(
+  app.get<{
+    Params: { dx: string; dy: string; mx: string; my: string };
+    Querystring: { token?: string };
+  }>(
     "/ws/map/:dx/:dy/:mx/:my",
     { websocket: true },
     (socket, req) => {
+      // Verify JWT token from query param
+      const token = req.query.token;
+      if (!token) {
+        socket.send(JSON.stringify({ type: "error", message: "Missing token" }));
+        socket.close();
+        return;
+      }
+
+      try {
+        app.jwt.verify(token);
+      } catch {
+        socket.send(JSON.stringify({ type: "error", message: "Invalid token" }));
+        socket.close();
+        return;
+      }
+
       const { dx, dy, mx, my } = req.params;
       const mapKey = toMapKey(Number(dx), Number(dy), Number(mx), Number(my));
 

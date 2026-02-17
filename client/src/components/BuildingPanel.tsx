@@ -20,7 +20,7 @@ export function BuildingPanel() {
   if (!building || building.owner_id !== player.entity_id) return null;
 
   const handleTransferToPlayer = async () => {
-    await submitCommand(player.entity_id, "transfer_to_player", {
+    await submitCommand("transfer_to_player", {
       building_id: building.entity_id,
       material: transferMat,
       amount: transferAmt,
@@ -28,7 +28,7 @@ export function BuildingPanel() {
   };
 
   const handleTransferToBuilding = async () => {
-    await submitCommand(player.entity_id, "transfer_to_building", {
+    await submitCommand("transfer_to_building", {
       building_id: building.entity_id,
       material: transferMat,
       amount: transferAmt,
@@ -37,7 +37,7 @@ export function BuildingPanel() {
 
   const handleExport = async () => {
     if (building.class !== "port") return;
-    await submitCommand(player.entity_id, "export", {
+    await submitCommand("export", {
       building_id: building.entity_id,
       material: transferMat,
       amount: transferAmt,
