@@ -53,9 +53,13 @@ function getEventColor(type: string): string {
     case "building_placed": return "#4fc3f7";
     case "upkeep_charged": return "#ffb74d";
     case "building_suspended": return "#e57373";
-    case "tax_charged": return "#ba68c8";
+    case "building_resumed": return "#66bb6a";
     case "transfer": return "#90caf9";
     case "export": return "#a5d6a7";
+    case "auto_sell": return "#aed581";
+    case "route_executed": return "#80cbc4";
+    case "market_update": return "#78909c";
+    case "command_failed": return "#ef5350";
     default: return "#e0e0e0";
   }
 }
@@ -68,12 +72,25 @@ function formatEventData(type: string, data: Record<string, unknown>): string {
       return `${data.building_class}`;
     case "upkeep_charged":
       return `-${data.amount} money`;
-    case "tax_charged":
-      return `-${(data.amount as number).toFixed(1)} money`;
+    case "building_suspended":
+      return `${data.building_id} (${data.reason})`;
+    case "building_resumed":
+      return `${data.building_id}`;
     case "transfer":
-      return `${data.direction} ${data.material} x${data.amount}`;
+      return `${data.material} x${data.amount} → ${data.to_building_id}`;
     case "export":
-      return `${data.material} x${data.amount}`;
+      return `${data.material} x${data.amount} @$${(data.price as number)?.toFixed(2)} = $${(data.revenue as number)?.toFixed(1)}`;
+    case "auto_sell":
+      if (data.configured) return `${data.resource}: ${typeof data.rule === "string" ? data.rule : (data.rule as any)?.mode}`;
+      return `${data.resource} x${(data.amount as number)?.toFixed(1)} @$${(data.price as number)?.toFixed(2)} = $${(data.revenue as number)?.toFixed(1)}`;
+    case "route_executed":
+      if (data.configured) return `${data.resource}: ${data.from_building_id} → ${data.to_building_id}`;
+      if (data.deleted) return `deleted: ${data.resource}`;
+      return `${data.resource} x${(data.amount as number)?.toFixed(1)} → ${data.to_building_id}`;
+    case "command_failed":
+      return `${data.command_type}: ${data.error}`;
+    case "market_update":
+      return "";
     case "tick_complete":
       return `tick ${data.tick}`;
     default:

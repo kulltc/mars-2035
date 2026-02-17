@@ -4,10 +4,10 @@ import {
   type Tile,
   type GameEvent,
   type Command,
-  type DistrictState,
   type WorldMeta,
   type MapKey,
-  type DistrictKey,
+  type MaterialType,
+  type MarketPrices,
   type EventType,
   TICK_INTERVAL_MS,
   DISTRICTS_X,
@@ -15,8 +15,9 @@ import {
   MAPS_PER_DISTRICT_X,
   MAPS_PER_DISTRICT_Y,
   TILES_PER_MAP,
+  BASE_MARKET_PRICES,
+  STARTING_MONEY,
   tileKey,
-  toDistrictKey,
 } from "@mars-2035/shared";
 import { generateWorld } from "../seed/worldGen.js";
 import type { WorldSnapshotPayload } from "../db.js";
@@ -28,7 +29,7 @@ export class WorldStore {
   players = new Map<string, Player>();
   buildings = new Map<string, Building>();
   tiles: Map<MapKey, Map<string, Tile>>; // mapKey → (tileKey → Tile)
-  districts = new Map<DistrictKey, DistrictState>();
+  marketPrices: MarketPrices = { ...BASE_MARKET_PRICES };
 
   // Event log
   events: GameEvent[] = [];
@@ -41,25 +42,10 @@ export class WorldStore {
   tick = 0;
 
   // WebSocket subscribers: mapKey → Set<callback>
-  subscribers = new Map<MapKey, Set<(events: GameEvent[]) => void>>();
+  subscribers = new Map<MapKey, Set<(events: GameEvent[], buildings: Building[]) => void>>();
 
   constructor(seed = 42) {
     this.tiles = generateWorld(seed);
-    this.initDistricts();
-  }
-
-  private initDistricts() {
-    for (let dx = 0; dx < DISTRICTS_X; dx++) {
-      for (let dy = 0; dy < DISTRICTS_Y; dy++) {
-        const key = toDistrictKey(dx, dy);
-        this.districts.set(key, {
-          district_id: key,
-          owner_id: undefined,
-          contested: false,
-          influence_scores: {},
-        });
-      }
-    }
   }
 
   // ── Helpers ──
@@ -94,15 +80,6 @@ export class WorldStore {
     return result;
   }
 
-  getBuildingsByDistrict(districtKey: DistrictKey): Building[] {
-    const result: Building[] = [];
-    for (const b of this.buildings.values()) {
-      const dk = toDistrictKey(b.location.dx, b.location.dy);
-      if (dk === districtKey) result.push(b);
-    }
-    return result;
-  }
-
   getBuildingsByPlayer(playerId: string): Building[] {
     const result: Building[] = [];
     for (const b of this.buildings.values()) {
@@ -132,7 +109,7 @@ export class WorldStore {
 
   // ── Subscription management ──
 
-  subscribe(mapKey: MapKey, cb: (events: GameEvent[]) => void): () => void {
+  subscribe(mapKey: MapKey, cb: (events: GameEvent[], buildings: Building[]) => void): () => void {
     let subs = this.subscribers.get(mapKey);
     if (!subs) {
       subs = new Set();
@@ -142,10 +119,10 @@ export class WorldStore {
     return () => subs!.delete(cb);
   }
 
-  broadcast(mapKey: MapKey, events: GameEvent[]) {
+  broadcast(mapKey: MapKey, events: GameEvent[], buildings: Building[]) {
     const subs = this.subscribers.get(mapKey);
     if (subs) {
-      for (const cb of subs) cb(events);
+      for (const cb of subs) cb(events, buildings);
     }
   }
 
@@ -156,7 +133,7 @@ export class WorldStore {
     for (const [k, v] of this.players) players[k] = v;
     const buildings: Record<string, Building> = {};
     for (const [k, v] of this.buildings) buildings[k] = v;
-    return { tick: this.tick, seq: this.seq, players, buildings };
+    return { tick: this.tick, seq: this.seq, players, buildings, marketPrices: this.marketPrices };
   }
 
   static fromSnapshot(payload: WorldSnapshotPayload, seed: number): WorldStore {
@@ -167,6 +144,10 @@ export class WorldStore {
     store.players = new Map(Object.entries(payload.players));
     store.buildings = new Map(Object.entries(payload.buildings));
 
+    if (payload.marketPrices) {
+      store.marketPrices = payload.marketPrices;
+    }
+
     // Re-link buildings to tiles
     for (const building of store.buildings.values()) {
       const mapTiles = store.tiles.get(building.map_key as MapKey);
@@ -174,6 +155,56 @@ export class WorldStore {
         const tk = tileKey(building.location.x, building.location.y);
         const tile = mapTiles.get(tk);
         if (tile) tile.building_id = building.entity_id;
+      }
+    }
+
+    // One-time migration: move money from old map_accounts.assets to admin outpost inventory
+    let didMigrate = false;
+    for (const player of store.players.values()) {
+      for (const [, account] of Object.entries(player.map_accounts)) {
+        const legacyAssets = (account as Record<string, unknown>).assets as Record<string, number> | undefined;
+        if (!legacyAssets) continue;
+
+        didMigrate = true;
+        const adminId = account.admin_outpost_building_id;
+        if (!adminId) continue;
+
+        const adminOutpost = store.buildings.get(adminId);
+        if (!adminOutpost) continue;
+
+        // Transfer all legacy assets to admin outpost inventory
+        for (const [mat, amount] of Object.entries(legacyAssets)) {
+          if (amount && amount > 0) {
+            adminOutpost.inventory[mat as MaterialType] =
+              (adminOutpost.inventory[mat as MaterialType] ?? 0) + amount;
+            console.log(`Migration: moved ${amount} ${mat} from account to admin outpost ${adminId}`);
+          }
+        }
+
+        // Clear legacy assets
+        delete (account as Record<string, unknown>).assets;
+      }
+    }
+
+    // Only seed money and unsuspend if we actually migrated legacy data
+    if (didMigrate) {
+      for (const player of store.players.values()) {
+        for (const [, account] of Object.entries(player.map_accounts)) {
+          const adminId = account.admin_outpost_building_id;
+          if (!adminId) continue;
+          const adminOutpost = store.buildings.get(adminId);
+          if (!adminOutpost) continue;
+          if (!adminOutpost.inventory.money || adminOutpost.inventory.money <= 0) {
+            adminOutpost.inventory.money = STARTING_MONEY;
+            console.log(`Migration: seeded admin outpost ${adminId} with ${STARTING_MONEY} money`);
+          }
+        }
+      }
+
+      for (const building of store.buildings.values()) {
+        if (building.status !== "suspended") continue;
+        building.status = "active";
+        console.log(`Migration: reactivated ${building.entity_id} (${building.class})`);
       }
     }
 

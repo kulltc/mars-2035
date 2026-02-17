@@ -2,14 +2,12 @@ import Fastify from "fastify";
 import fastifyWebSocket from "@fastify/websocket";
 import fastifyCors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
-import { DISTRICTS_X, DISTRICTS_Y, toDistrictKey } from "@mars-2035/shared";
 import { WorldStore } from "./store/WorldStore.js";
 import { TickRunner } from "./tick/TickRunner.js";
 import { registerRoutes } from "./api/routes.js";
 import { registerWebSocket } from "./api/ws.js";
 import { registerAuthRoutes, setPlayerCounter } from "./api/auth.js";
 import { setBuildingCounter } from "./systems/building.js";
-import { recalculateDistrict } from "./systems/influence.js";
 import { initDb, loadLatestSnapshot } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -32,13 +30,6 @@ async function main() {
 
   if (snapshot) {
     store = WorldStore.fromSnapshot(snapshot, 42);
-
-    // Recalculate districts from restored buildings
-    for (let dx = 0; dx < DISTRICTS_X; dx++) {
-      for (let dy = 0; dy < DISTRICTS_Y; dy++) {
-        recalculateDistrict(store, toDistrictKey(dx, dy));
-      }
-    }
 
     // Restore building counter from max building ID (bld_N)
     let maxBld = 0;

@@ -52,14 +52,21 @@ export const BUILDING_CLASSES = [
   "admin_outpost",
   "mine",
   "port",
-  "core_hq",
-  "admin_hub",
-  "relay",
 ] as const;
 
 export type BuildingClass = (typeof BUILDING_CLASSES)[number];
 
 export type BuildingStatus = "active" | "suspended" | "constructing";
+
+export interface AutoSellRule {
+  mode: "any_rate" | "min_rate";
+  min_price?: number;
+}
+
+export interface OutgoingRoute {
+  resource: MaterialType;
+  to_building_id: string;
+}
 
 export interface Building {
   entity_id: string;
@@ -73,16 +80,21 @@ export interface Building {
   // Mine-specific
   resource_type?: ResourceType;
   production_per_tick?: number;
-  // Influence buildings
-  influence_value?: number;
+  // Port auto-sell config
+  auto_sell?: Partial<Record<ResourceType, AutoSellRule>>;
+  // Routes: move resources to other buildings each tick
+  outgoing_routes?: OutgoingRoute[];
 }
+
+// ── Market ──
+
+export type MarketPrices = Record<ResourceType, number>;
 
 // ── Player ──
 
 export type PlayerStatus = "active" | "inactive";
 
 export interface MapAccount {
-  assets: Assets;
   admin_outpost_building_id?: string;
 }
 
@@ -93,15 +105,6 @@ export interface Player {
   map_accounts: Record<MapKey, MapAccount>;
 }
 
-// ── District ──
-
-export interface DistrictState {
-  district_id: DistrictKey;
-  owner_id?: string;
-  contested: boolean;
-  influence_scores: Record<string, number>; // player_id → total influence
-}
-
 // ── Events ──
 
 export type EventType =
@@ -110,10 +113,12 @@ export type EventType =
   | "upkeep_charged"
   | "building_suspended"
   | "building_resumed"
-  | "tax_charged"
+  | "auto_sell"
+  | "market_update"
   | "transfer"
   | "export"
-  | "district_ownership_changed"
+  | "route_executed"
+  | "command_failed"
   | "player_registered"
   | "tick_complete";
 
@@ -131,9 +136,11 @@ export interface GameEvent {
 
 export type CommandType =
   | "place_building"
-  | "transfer_to_player"
-  | "transfer_to_building"
-  | "export";
+  | "transfer"
+  | "export"
+  | "configure_auto_sell"
+  | "configure_route"
+  | "delete_route";
 
 export interface Command {
   id: string;

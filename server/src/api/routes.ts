@@ -1,10 +1,20 @@
 import type { FastifyInstance } from "fastify";
 import {
   type Command,
+  type CommandType,
+  BUILDING_CLASSES,
   toMapKey,
-  toDistrictKey,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
+
+const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
+  "place_building",
+  "transfer",
+  "export",
+  "configure_auto_sell",
+  "configure_route",
+  "delete_route",
+]);
 
 let commandCounter = 0;
 
@@ -50,20 +60,6 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
     return { ...player, buildings };
   });
 
-  // GET /api/district/:dx/:dy
-  app.get<{ Params: { dx: string; dy: string } }>(
-    "/api/district/:dx/:dy",
-    async (req, reply) => {
-      const key = toDistrictKey(Number(req.params.dx), Number(req.params.dy));
-      const district = store.districts.get(key);
-      if (!district) {
-        reply.code(404);
-        return { error: "District not found" };
-      }
-      return district;
-    }
-  );
-
   // POST /api/command (authenticated — player_id from JWT)
   app.post<{ Body: { type: string; data: Record<string, unknown> } }>(
     "/api/command",
@@ -78,6 +74,11 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
       const { playerId } = req.user as { userId: string; playerId: string };
       const { type, data } = req.body;
 
+      if (!VALID_COMMAND_TYPES.has(type)) {
+        reply.code(400);
+        return { error: `Invalid command type: ${type}` };
+      }
+
       const player = store.players.get(playerId);
       if (!player) {
         reply.code(404);
@@ -87,7 +88,7 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
       const command: Command = {
         id: `cmd_${++commandCounter}`,
         player_id: playerId,
-        type: type as Command["type"],
+        type: type as CommandType,
         data,
         submitted_at: Date.now(),
       };

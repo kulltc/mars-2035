@@ -1,4 +1,4 @@
-import type { BuildingClass, ResourceType } from "./types.js";
+import type { Assets, BuildingClass, ResourceType } from "./types.js";
 
 // ── World dimensions ──
 
@@ -16,49 +16,29 @@ export const TICK_INTERVAL_MS = 5_000; // 5s for dev
 
 export interface BuildingDef {
   upkeep_per_tick: number;
-  influence_value?: number;
+  cost: Assets;
   production_per_tick?: number; // base, multiplied by richness for mines
 }
 
 export const BUILDING_DEFS: Record<BuildingClass, BuildingDef> = {
-  admin_outpost: { upkeep_per_tick: 0 },
-  mine: { upkeep_per_tick: 2, production_per_tick: 5 },
-  port: { upkeep_per_tick: 3 },
-  core_hq: { upkeep_per_tick: 10, influence_value: 100 },
-  admin_hub: { upkeep_per_tick: 5, influence_value: 50 },
-  relay: { upkeep_per_tick: 1, influence_value: 10 },
+  admin_outpost: { upkeep_per_tick: 0, cost: {} },
+  mine: { upkeep_per_tick: 2, cost: { money: 100 }, production_per_tick: 5 },
+  port: { upkeep_per_tick: 3, cost: { money: 150 } },
 };
 
-// ── Influence ──
+// ── Market ──
 
-export const CONTEST_DELTA = 20; // minimum lead to claim ownership
-
-// ── Tax rates ──
-
-export const BUILDING_TAX_RATE: Record<BuildingClass, number> = {
-  admin_outpost: 0,
-  mine: 1,
-  port: 2,
-  core_hq: 3,
-  admin_hub: 2,
-  relay: 0.5,
+export const BASE_MARKET_PRICES: Record<ResourceType, number> = {
+  steel: 1.0,
+  silicon: 1.2,
+  polymer: 1.5,
+  rare_earth: 3.0,
+  carbon: 0.8,
 };
 
-export const INVENTORY_TAX_RATE: Record<ResourceType, number> = {
-  steel: 0.01,
-  silicon: 0.01,
-  polymer: 0.01,
-  rare_earth: 0.02,
-  carbon: 0.01,
-};
-
-export const EXPORT_TAX_RATE: Record<ResourceType, number> = {
-  steel: 0.05,
-  silicon: 0.05,
-  polymer: 0.05,
-  rare_earth: 0.1,
-  carbon: 0.05,
-};
+export const MARKET_VOLATILITY = 0.1;
+export const MARKET_PRICE_MIN = 0.2;
+export const MARKET_PRICE_MAX = 10.0;
 
 // ── Resource generation ──
 

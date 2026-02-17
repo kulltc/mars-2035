@@ -41,17 +41,20 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
           tick: store.tick,
           tiles,
           buildings,
+          market_prices: store.marketPrices,
         })
       );
 
       // Subscribe to map events
-      const unsub = store.subscribe(mapKey, (events: GameEvent[]) => {
+      const unsub = store.subscribe(mapKey, (events: GameEvent[], buildings) => {
         if (socket.readyState === 1) {
           socket.send(
             JSON.stringify({
               type: "events",
               map_key: mapKey,
               events,
+              buildings,
+              market_prices: store.marketPrices,
             })
           );
         }

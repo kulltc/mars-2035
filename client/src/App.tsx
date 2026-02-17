@@ -6,7 +6,7 @@ import { MapView } from "./components/MapView.js";
 import { TileInfo } from "./components/TileInfo.js";
 import { PlayerDashboard } from "./components/PlayerDashboard.js";
 import { BuildingPanel } from "./components/BuildingPanel.js";
-import { DistrictInfo } from "./components/DistrictInfo.js";
+import { MarketInfo } from "./components/MarketInfo.js";
 import { EventLog } from "./components/EventLog.js";
 import { CommandPanel } from "./components/CommandPanel.js";
 
@@ -186,7 +186,7 @@ export function App() {
         </div>
         <PlayerDashboard />
         <CommandPanel />
-        <DistrictInfo />
+        <MarketInfo />
       </div>
 
       {/* Center: map */}

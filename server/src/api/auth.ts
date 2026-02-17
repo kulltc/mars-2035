@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcrypt";
-import { type Player, STARTING_MONEY, toMapKey } from "@mars-2035/shared";
+import type { Player } from "@mars-2035/shared";
 import { pool } from "../db.js";
 import type { WorldStore } from "../store/WorldStore.js";
 
@@ -18,11 +18,6 @@ function createPlayer(store: WorldStore, playerName: string, playerId: string): 
     map_accounts: {},
   };
   store.players.set(playerId, player);
-
-  const startMap = toMapKey(0, 0, 0, 0);
-  player.map_accounts[startMap] = {
-    assets: { money: STARTING_MONEY },
-  };
 
   store.pushEvent("player_registered", { player_id: playerId, name: playerName });
   return player;

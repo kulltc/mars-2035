@@ -1,4 +1,4 @@
-import type { Player, WorldMeta, Tile, Building, DistrictState, GameEvent, AuthResponse } from "@mars-2035/shared";
+import type { Player, WorldMeta, Tile, Building, GameEvent, AuthResponse } from "@mars-2035/shared";
 
 const BASE = "";
 
@@ -74,21 +74,20 @@ export async function fetchPlayer(id: string): Promise<Player & { buildings: Bui
   return res.json();
 }
 
-export async function fetchDistrict(dx: number, dy: number): Promise<DistrictState> {
-  const res = await fetch(`${BASE}/api/district/${dx}/${dy}`);
-  return res.json();
-}
-
 export async function submitCommand(
   type: string,
   data: Record<string, unknown>
-): Promise<{ ok: boolean; command_id: string }> {
+): Promise<{ ok: boolean; command_id?: string; error?: string }> {
   const res = await fetch(`${BASE}/api/command`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ type, data }),
   });
-  return res.json();
+  const json = await res.json();
+  if (!res.ok) {
+    console.error(`Command ${type} rejected:`, json.error);
+  }
+  return json;
 }
 
 export async function fetchEvents(mapKey: string, sinceSeq = 0): Promise<GameEvent[]> {

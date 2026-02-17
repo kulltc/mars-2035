@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type {
-  Player, Building, Tile, GameEvent, DistrictState, WorldMeta,
+  Player, Building, Tile, GameEvent, WorldMeta, MarketPrices,
 } from "@mars-2035/shared";
 
 export interface GameState {
@@ -34,9 +34,9 @@ export interface GameState {
   selectedTile: { x: number; y: number } | null;
   setSelectedTile: (tile: { x: number; y: number } | null) => void;
 
-  // District
-  district: DistrictState | null;
-  setDistrict: (district: DistrictState | null) => void;
+  // Market prices
+  marketPrices: MarketPrices | null;
+  setMarketPrices: (prices: MarketPrices) => void;
 
   // Event log
   events: GameEvent[];
@@ -88,8 +88,8 @@ export const useGameStore = create<GameState>((set) => ({
   selectedTile: null,
   setSelectedTile: (selectedTile) => set({ selectedTile }),
 
-  district: null,
-  setDistrict: (district) => set({ district }),
+  marketPrices: null,
+  setMarketPrices: (marketPrices) => set({ marketPrices }),
 
   events: [],
   addEvents: (newEvents) =>
