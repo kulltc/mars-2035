@@ -52,6 +52,7 @@ function notifyForEvents(events: GameEvent[]) {
 export function useMapSubscription() {
   const wsRef = useRef<WebSocket | null>(null);
   const currentMap = useGameStore((s) => s.currentMap);
+  const token = useGameStore((s) => s.token);
   const setTiles = useGameStore((s) => s.setTiles);
   const setBuildings = useGameStore((s) => s.setBuildings);
   const setWorkers = useGameStore((s) => s.setWorkers);
@@ -60,7 +61,7 @@ export function useMapSubscription() {
   const setWorld = useGameStore((s) => s.setWorld);
 
   useEffect(() => {
-    if (!currentMap) return;
+    if (!currentMap || !token) return;
 
     const { dx, dy, mx, my } = currentMap;
 
@@ -98,5 +99,5 @@ export function useMapSubscription() {
       ws.close();
       wsRef.current = null;
     };
-  }, [currentMap, setTiles, setBuildings, setWorkers, addEvents, setMarketPrices, setWorld]);
+  }, [currentMap, token, setTiles, setBuildings, setWorkers, addEvents, setMarketPrices, setWorld]);
 }
