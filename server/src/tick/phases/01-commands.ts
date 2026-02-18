@@ -3,15 +3,18 @@ import type {
   BuildingClass,
   Command,
   CommandType,
+  ConstructTask,
   GameEvent,
   Location,
+  MapKey,
   MaterialType,
   OutgoingRoute,
   Player,
   ResourceType,
 } from "@mars-2035/shared";
+import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
-import { placeBuilding } from "../../systems/building.js";
+import { placeBuilding, spawnWorker } from "../../systems/building.js";
 
 // ── Handler result type ──
 
@@ -29,8 +32,26 @@ function handlePlaceBuilding(store: WorldStore, player: Player, data: Record<str
     location: Location;
   };
 
-  const result = placeBuilding(store, player, building_class, location);
+  const def = BUILDING_DEFS[building_class];
+  const initialStatus = def.build_ticks > 0 ? "constructing" as const : "active" as const;
+
+  const result = placeBuilding(store, player, building_class, location, initialStatus);
   if (!result.ok) return result;
+
+  // Create a construct task for buildings that need construction time
+  if (def.build_ticks > 0) {
+    const mapKey = result.building.map_key;
+    const taskId = `task_${++store.taskCounter}`;
+    const task: ConstructTask = {
+      id: taskId,
+      type: "construct",
+      owner_id: player.entity_id,
+      map_key: mapKey,
+      building_id: result.building.entity_id,
+      ticks_remaining: def.build_ticks,
+    };
+    store.taskQueue.set(taskId, task);
+  }
 
   return {
     ok: true,
@@ -41,6 +62,7 @@ function handlePlaceBuilding(store: WorldStore, player: Player, data: Record<str
         building_class,
         owner_id: player.entity_id,
         location,
+        status: initialStatus,
       },
       mapKey: result.building.map_key,
     }],
@@ -69,8 +91,13 @@ function handleTransfer(store: WorldStore, player: Player, data: Record<string, 
   const available = from.inventory[material] ?? 0;
   if (available < amount) return { ok: false, error: `Insufficient ${material} (have ${available.toFixed(1)})` };
 
-  from.inventory[material] = available - amount;
-  to.inventory[material] = (to.inventory[material] ?? 0) + amount;
+  // Clamp to destination remaining capacity
+  const destRemaining = remainingCapacity(to.inventory, to.capacity);
+  const actual = Math.min(amount, destRemaining);
+  if (actual <= 0) return { ok: false, error: "Destination is full" };
+
+  from.inventory[material] = available - actual;
+  to.inventory[material] = (to.inventory[material] ?? 0) + actual;
 
   return {
     ok: true,
@@ -80,7 +107,7 @@ function handleTransfer(store: WorldStore, player: Player, data: Record<string, 
         from_building_id,
         to_building_id,
         material,
-        amount,
+        amount: actual,
         player_id: player.entity_id,
       },
       mapKey: from.map_key,
@@ -110,6 +137,10 @@ function handleExport(store: WorldStore, player: Player, data: Record<string, un
 
   building.inventory[material] = available - amount;
   building.inventory.money = (building.inventory.money ?? 0) + revenue;
+
+  // Supply pressure
+  const resType = material as ResourceType;
+  store.supplyPressure[resType] = (store.supplyPressure[resType] ?? 0) + amount;
 
   return {
     ok: true,
@@ -217,6 +248,159 @@ function handleDeleteRoute(store: WorldStore, player: Player, data: Record<strin
   };
 }
 
+function handleBuyWorker(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { map_key } = data as { map_key: MapKey };
+
+  const account = player.map_accounts[map_key];
+  if (!account?.admin_outpost_building_id) return { ok: false, error: "No admin outpost on this map" };
+
+  const admin = store.buildings.get(account.admin_outpost_building_id);
+  if (!admin) return { ok: false, error: "Admin outpost not found" };
+
+  // Deduct cost
+  for (const [mat, cost] of Object.entries(WORKER_COST)) {
+    if (!cost) continue;
+    const available = admin.inventory[mat as MaterialType] ?? 0;
+    if (available < cost) {
+      return { ok: false, error: `Insufficient ${mat} (need ${cost}, have ${available.toFixed(1)})` };
+    }
+  }
+  for (const [mat, cost] of Object.entries(WORKER_COST)) {
+    if (!cost) continue;
+    admin.inventory[mat as MaterialType] = (admin.inventory[mat as MaterialType] ?? 0) - cost;
+  }
+
+  const worker = spawnWorker(store, player.entity_id, map_key, admin.location.x, admin.location.y);
+
+  return {
+    ok: true,
+    events: [{
+      type: "worker_spawned",
+      data: { worker_id: worker.entity_id, owner_id: player.entity_id, map_key },
+      mapKey: map_key,
+    }],
+  };
+}
+
+function handleSellBuilding(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { building_id } = data as { building_id: string };
+
+  const building = store.buildings.get(building_id);
+  if (!building) return { ok: false, error: "Building not found" };
+  if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+  if (building.class === "admin_outpost") return { ok: false, error: "Cannot sell admin outpost" };
+
+  // Refund 50% of building cost to admin outpost
+  const account = player.map_accounts[building.map_key];
+  const adminOutpost = account?.admin_outpost_building_id
+    ? store.buildings.get(account.admin_outpost_building_id)
+    : undefined;
+
+  if (adminOutpost) {
+    const def = BUILDING_DEFS[building.class];
+    for (const [mat, cost] of Object.entries(def.cost)) {
+      if (!cost) continue;
+      const refund = Math.floor(cost * 0.5);
+      if (refund > 0) {
+        adminOutpost.inventory[mat as MaterialType] =
+          (adminOutpost.inventory[mat as MaterialType] ?? 0) + refund;
+      }
+    }
+    // Transfer any remaining inventory to admin outpost
+    for (const [mat, amount] of Object.entries(building.inventory)) {
+      if (!amount || amount <= 0) continue;
+      adminOutpost.inventory[mat as MaterialType] =
+        (adminOutpost.inventory[mat as MaterialType] ?? 0) + amount;
+    }
+  }
+
+  // Remove routes referencing this building from other buildings
+  for (const b of store.buildings.values()) {
+    if (!b.outgoing_routes) continue;
+    b.outgoing_routes = b.outgoing_routes.filter(
+      (r) => r.to_building_id !== building_id
+    );
+  }
+
+  // Remove tasks referencing this building
+  for (const [taskId, task] of store.taskQueue) {
+    if (
+      (task.type === "pickup" && (task.from_building_id === building_id || task.to_building_id === building_id)) ||
+      (task.type === "dropoff" && task.building_id === building_id) ||
+      (task.type === "construct" && task.building_id === building_id)
+    ) {
+      store.taskQueue.delete(taskId);
+    }
+  }
+
+  // Reset workers that had tasks for this building
+  for (const worker of store.workers.values()) {
+    if (!worker.current_task_id) continue;
+    if (!store.taskQueue.has(worker.current_task_id)) {
+      worker.current_task_id = undefined;
+      worker.state = "idle";
+    }
+  }
+
+  // Clear tile
+  const mapTiles = store.tiles.get(building.map_key);
+  if (mapTiles) {
+    const tk = tileKey(building.location.x, building.location.y);
+    const tile = mapTiles.get(tk);
+    if (tile) delete tile.building_id;
+  }
+
+  const mapKey = building.map_key;
+  store.buildings.delete(building_id);
+
+  return {
+    ok: true,
+    events: [{
+      type: "building_destroyed",
+      data: { building_id, building_class: building.class, owner_id: player.entity_id, reason: "sold" },
+      mapKey,
+    }],
+  };
+}
+
+function handleRemoveWorker(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { worker_id } = data as { worker_id: string };
+
+  const worker = store.workers.get(worker_id);
+  if (!worker) return { ok: false, error: "Worker not found" };
+  if (worker.owner_id !== player.entity_id) return { ok: false, error: "Not your worker" };
+
+  // Cancel current task
+  if (worker.current_task_id) {
+    store.taskQueue.delete(worker.current_task_id);
+  }
+
+  // Transfer any cargo to admin outpost
+  const account = player.map_accounts[worker.map_key];
+  const adminOutpost = account?.admin_outpost_building_id
+    ? store.buildings.get(account.admin_outpost_building_id)
+    : undefined;
+  if (adminOutpost) {
+    for (const [mat, amount] of Object.entries(worker.inventory)) {
+      if (!amount || amount <= 0) continue;
+      adminOutpost.inventory[mat as MaterialType] =
+        (adminOutpost.inventory[mat as MaterialType] ?? 0) + amount;
+    }
+  }
+
+  const mapKey = worker.map_key;
+  store.workers.delete(worker_id);
+
+  return {
+    ok: true,
+    events: [{
+      type: "worker_spawned",
+      data: { worker_id, owner_id: player.entity_id, map_key: mapKey, removed: true },
+      mapKey,
+    }],
+  };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -226,6 +410,9 @@ const handlers: Record<CommandType, CommandHandler> = {
   configure_auto_sell: handleConfigureAutoSell,
   configure_route: handleConfigureRoute,
   delete_route: handleDeleteRoute,
+  buy_worker: handleBuyWorker,
+  sell_building: handleSellBuilding,
+  remove_worker: handleRemoveWorker,
 };
 
 // ── Main processor ──

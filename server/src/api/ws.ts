@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { toMapKey, type GameEvent } from "@mars-2035/shared";
+import { toMapKey, type GameEvent, type Worker } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 
 export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
@@ -34,6 +34,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
       // Send initial snapshot
       const tiles = store.serializeTiles(mapKey);
       const buildings = store.getBuildingsByMap(mapKey);
+      const workers = store.getWorkersByMap(mapKey);
       socket.send(
         JSON.stringify({
           type: "snapshot",
@@ -41,12 +42,13 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
           tick: store.tick,
           tiles,
           buildings,
+          workers,
           market_prices: store.marketPrices,
         })
       );
 
       // Subscribe to map events
-      const unsub = store.subscribe(mapKey, (events: GameEvent[], buildings) => {
+      const unsub = store.subscribe(mapKey, (events: GameEvent[], buildings, workers: Worker[]) => {
         if (socket.readyState === 1) {
           socket.send(
             JSON.stringify({
@@ -54,6 +56,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
               map_key: mapKey,
               events,
               buildings,
+              workers,
               market_prices: store.marketPrices,
             })
           );

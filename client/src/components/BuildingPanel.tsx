@@ -319,6 +319,23 @@ export function BuildingPanel() {
           })}
         </div>
       )}
+
+      {/* ── Sell building ── */}
+      {building.class !== "admin_outpost" && (
+        <div style={{ marginTop: 8, borderTop: "1px solid #333", paddingTop: 8 }}>
+          <button
+            onClick={async () => {
+              if (!confirm(`Sell this ${building.class.replace(/_/g, " ")}? You'll get 50% cost refund.`)) return;
+              showStatus("Selling...", "#90caf9");
+              const ok = await runCommand("sell", "sell_building", { building_id: building.entity_id });
+              if (ok) showStatus("Building sold", "#ffb74d");
+            }}
+            style={{ ...btnStyle, color: "#e57373", border: "1px solid #e5737380" }}
+          >
+            Sell Building
+          </button>
+        </div>
+      )}
     </div>
   );
 }

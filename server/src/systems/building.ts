@@ -6,6 +6,8 @@ import {
   type Player,
   BUILDING_DEFS,
   STARTING_MONEY,
+  STARTING_WORKERS,
+  WORKER_CAPACITY,
   locationToMapKey,
   tileKey,
 } from "@mars-2035/shared";
@@ -17,11 +19,29 @@ export function setBuildingCounter(n: number) {
   buildingCounter = n;
 }
 
+export function spawnWorker(store: WorldStore, ownerId: string, mapKey: string, x: number, y: number) {
+  const wid = `wrk_${++store.workerCounter}`;
+  const worker: import("@mars-2035/shared").Worker = {
+    entity_id: wid,
+    owner_id: ownerId,
+    map_key: mapKey,
+    x, y,
+    inventory: {},
+    capacity: WORKER_CAPACITY,
+    state: "idle",
+    worker_status: "active",
+  };
+  store.workers.set(wid, worker);
+  store.pushEvent("worker_spawned", { worker_id: wid, owner_id: ownerId, x, y }, mapKey);
+  return worker;
+}
+
 export function placeBuilding(
   store: WorldStore,
   player: Player,
   buildingClass: BuildingClass,
-  location: Location
+  location: Location,
+  initialStatus: Building["status"] = "active"
 ): { ok: true; building: Building } | { ok: false; error: string } {
   const mapKey = locationToMapKey(location);
   const tile = store.getTile(mapKey, location.x, location.y);
@@ -83,9 +103,10 @@ export function placeBuilding(
     owner_id: player.entity_id,
     location,
     map_key: mapKey,
-    status: "active",
+    status: initialStatus,
     upkeep_per_tick: def.upkeep_per_tick,
     inventory: {},
+    capacity: def.capacity,
     resource_type: buildingClass === "mine" ? tile.resource!.type : undefined,
     production_per_tick:
       buildingClass === "mine"
@@ -110,6 +131,10 @@ export function placeBuilding(
   // Link admin outpost
   if (buildingClass === "admin_outpost") {
     player.map_accounts[mapKey].admin_outpost_building_id = entityId;
+    // Spawn starting workers
+    for (let i = 0; i < STARTING_WORKERS; i++) {
+      spawnWorker(store, player.entity_id, mapKey, location.x, location.y);
+    }
   }
 
   return { ok: true, building };

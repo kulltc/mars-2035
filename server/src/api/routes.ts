@@ -14,6 +14,7 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "configure_auto_sell",
   "configure_route",
   "delete_route",
+  "buy_worker",
 ]);
 
 let commandCounter = 0;

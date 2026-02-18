@@ -1,7 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useGameStore } from "../state/store.js";
-import { VIEWPORT_W, VIEWPORT_H, type Tile, type Building } from "@mars-2035/shared";
+import { VIEWPORT_W, VIEWPORT_H, TICK_INTERVAL_MS, totalInventory, type Tile, type Building, type Worker } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
+import { useAnimationFrame } from "../hooks/useAnimationFrame.js";
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
 
 const TILE_SIZE = 20;
 
@@ -28,12 +37,19 @@ const BUILDING_ICONS: Record<string, string> = {
 export function MapView() {
   const tiles = useGameStore((s) => s.tiles);
   const buildings = useGameStore((s) => s.buildings);
+  const workers = useGameStore((s) => s.workers);
   const selectedTile = useGameStore((s) => s.selectedTile);
   const setSelectedTile = useGameStore((s) => s.setSelectedTile);
   const buildMode = useGameStore((s) => s.buildMode);
   const setBuildMode = useGameStore((s) => s.setBuildMode);
   const player = useGameStore((s) => s.player);
   const currentMap = useGameStore((s) => s.currentMap);
+  const workerPrevPositions = useGameStore((s) => s.workerPrevPositions);
+  const workerUpdateAt = useGameStore((s) => s.workerUpdateAt);
+  const selectedWorkerId = useGameStore((s) => s.selectedWorkerId);
+  const setSelectedWorkerId = useGameStore((s) => s.setSelectedWorkerId);
+
+  useAnimationFrame();
 
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
@@ -64,6 +80,7 @@ export function MapView() {
   const handleTileClick = useCallback(
     async (x: number, y: number) => {
       setSelectedTile({ x, y });
+      setSelectedWorkerId(null);
 
       if (buildMode && player && currentMap) {
         const location = {
@@ -81,7 +98,7 @@ export function MapView() {
         setBuildMode(null);
       }
     },
-    [buildMode, player, currentMap, setSelectedTile, setBuildMode]
+    [buildMode, player, currentMap, setSelectedTile, setBuildMode, setSelectedWorkerId]
   );
 
   // Compute route arrows for selected building
@@ -169,6 +186,10 @@ export function MapView() {
           opacity = 0.5;
           border = `2px dashed #e57373`;
           boxShadow = "none";
+        } else if (building.status === "constructing") {
+          opacity = 0.5;
+          border = `2px dashed #ffb74d`;
+          boxShadow = "none";
         }
       }
       if (isSelected) {
@@ -225,30 +246,112 @@ export function MapView() {
       </div>
       <div style={{ position: "relative", width: mapW, height: mapH }}>
         <div style={{ lineHeight: 0 }}>{rows}</div>
-        {/* Route arrows SVG overlay */}
-        {routeArrows.length > 0 && (
-          <svg
-            style={{ position: "absolute", top: 0, left: 0, width: mapW, height: mapH, pointerEvents: "none" }}
-          >
-            <defs>
-              <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-                <polygon points="0 0, 8 3, 0 6" fill="#4fc3f7" />
-              </marker>
-              <marker id="arrowhead-gold" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-                <polygon points="0 0, 8 3, 0 6" fill="#ffd54f" />
-              </marker>
-            </defs>
-            {routeArrows.map((a, i) => (
-              <line
-                key={i}
-                x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2}
-                stroke={a.color}
-                strokeWidth={2}
-                markerEnd={a.color.includes("ffd54f") ? "url(#arrowhead-gold)" : "url(#arrowhead)"}
-              />
-            ))}
-          </svg>
-        )}
+        {/* SVG overlay for route arrows and workers */}
+        <svg
+          style={{ position: "absolute", top: 0, left: 0, width: mapW, height: mapH, pointerEvents: "none" }}
+        >
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#4fc3f7" />
+            </marker>
+            <marker id="arrowhead-gold" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#ffd54f" />
+            </marker>
+          </defs>
+          {routeArrows.map((a, i) => (
+            <line
+              key={i}
+              x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2}
+              stroke={a.color}
+              strokeWidth={2}
+              markerEnd={a.color.includes("ffd54f") ? "url(#arrowhead-gold)" : "url(#arrowhead)"}
+            />
+          ))}
+          {/* Workers */}
+          {(() => {
+            const now = Date.now();
+            const alpha = workerUpdateAt > 0
+              ? clamp((now - workerUpdateAt) / TICK_INTERVAL_MS, 0, 1)
+              : 1;
+
+            // Compute interpolated positions, then group by pixel tile to spread overlaps
+            const workerPositions: Array<{ w: typeof workers[0]; wx: number; wy: number }> = [];
+            for (const w of workers) {
+              const isMoving = w.state === "moving_to_pickup" || w.state === "moving_to_dropoff" || w.state === "returning_to_base" || w.state === "moving_to_construct";
+              const prev = workerPrevPositions.get(w.entity_id);
+
+              let wx: number, wy: number;
+              if (isMoving && prev) {
+                wx = lerp(prev.x, w.x, alpha);
+                wy = lerp(prev.y, w.y, alpha);
+              } else {
+                wx = w.x;
+                wy = w.y;
+              }
+              workerPositions.push({ w, wx, wy });
+            }
+
+            // Group by rounded tile position to detect overlaps
+            const tileGroups = new Map<string, number>();
+            for (const wp of workerPositions) {
+              const tk = `${Math.round(wp.wx)}:${Math.round(wp.wy)}`;
+              tileGroups.set(tk, (tileGroups.get(tk) ?? 0) + 1);
+            }
+            const tileIndex = new Map<string, number>();
+
+            const circles: React.ReactNode[] = [];
+            for (const { w, wx, wy } of workerPositions) {
+              const vx = wx - offset.x;
+              const vy = wy - offset.y;
+              if (vx < -1 || vx > VIEWPORT_W || vy < -1 || vy > VIEWPORT_H) continue;
+
+              let cx = vx * TILE_SIZE + TILE_SIZE / 2;
+              let cy = vy * TILE_SIZE + TILE_SIZE / 2;
+
+              // Spread workers sharing the same tile in a ring
+              const tk = `${Math.round(wx)}:${Math.round(wy)}`;
+              const count = tileGroups.get(tk) ?? 1;
+              if (count > 1) {
+                const idx = tileIndex.get(tk) ?? 0;
+                tileIndex.set(tk, idx + 1);
+                const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
+                const spread = Math.min(6, 3 + count);
+                cx += Math.cos(angle) * spread;
+                cy += Math.sin(angle) * spread;
+              }
+
+              const carrying = totalInventory(w.inventory) > 0;
+              const isInactive = w.worker_status === "inactive";
+              const isSelected = w.entity_id === selectedWorkerId;
+
+              if (isSelected) {
+                circles.push(
+                  <circle
+                    key={w.entity_id + "-glow"}
+                    cx={cx} cy={cy} r={8}
+                    fill="none"
+                    stroke="#4fc3f7" strokeWidth={1.5}
+                    opacity={0.6}
+                  />
+                );
+              }
+              circles.push(
+                <circle
+                  key={w.entity_id}
+                  cx={cx} cy={cy} r={4}
+                  fill={isInactive ? "#555" : carrying ? "#ffd54f" : "#bbb"}
+                  stroke={isSelected ? "#4fc3f7" : "#000"} strokeWidth={isSelected ? 1.5 : 1}
+                  style={{ pointerEvents: "all", cursor: "pointer" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedWorkerId(w.entity_id);
+                  }}
+                />
+              );
+            }
+            return circles;
+          })()}
+        </svg>
       </div>
       <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 11, color: "#888", flexWrap: "wrap" }}>
         {Object.entries(BUILDING_COLORS).map(([cls, color]) => (

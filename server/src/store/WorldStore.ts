@@ -9,6 +9,9 @@ import {
   type MaterialType,
   type MarketPrices,
   type EventType,
+  type ResourceType,
+  type Worker,
+  type WorkerTask,
   TICK_INTERVAL_MS,
   DISTRICTS_X,
   DISTRICTS_Y,
@@ -16,7 +19,10 @@ import {
   MAPS_PER_DISTRICT_Y,
   TILES_PER_MAP,
   BASE_MARKET_PRICES,
+  BUILDING_DEFS,
   STARTING_MONEY,
+  STARTING_WORKERS,
+  WORKER_CAPACITY,
   tileKey,
 } from "@mars-2035/shared";
 import { generateWorld } from "../seed/worldGen.js";
@@ -28,8 +34,12 @@ export class WorldStore {
   // Core state
   players = new Map<string, Player>();
   buildings = new Map<string, Building>();
+  workers = new Map<string, Worker>();
   tiles: Map<MapKey, Map<string, Tile>>; // mapKey → (tileKey → Tile)
   marketPrices: MarketPrices = { ...BASE_MARKET_PRICES };
+  supplyPressure: Record<ResourceType, number> = {
+    steel: 0, silicon: 0, polymer: 0, rare_earth: 0, carbon: 0,
+  };
 
   // Event log
   events: GameEvent[] = [];
@@ -41,8 +51,15 @@ export class WorldStore {
   // Tick counter
   tick = 0;
 
+  // Worker counter
+  workerCounter = 0;
+
+  // Task queue
+  taskQueue = new Map<string, WorkerTask>();
+  taskCounter = 0;
+
   // WebSocket subscribers: mapKey → Set<callback>
-  subscribers = new Map<MapKey, Set<(events: GameEvent[], buildings: Building[]) => void>>();
+  subscribers = new Map<MapKey, Set<(events: GameEvent[], buildings: Building[], workers: Worker[]) => void>>();
 
   constructor(seed = 42) {
     this.tiles = generateWorld(seed);
@@ -88,6 +105,14 @@ export class WorldStore {
     return result;
   }
 
+  getWorkersByMap(mapKey: MapKey): Worker[] {
+    const result: Worker[] = [];
+    for (const w of this.workers.values()) {
+      if (w.map_key === mapKey) result.push(w);
+    }
+    return result;
+  }
+
   getEventsSince(mapKey: MapKey, sinceSeq: number): GameEvent[] {
     return this.events.filter(
       (e) => e.seq > sinceSeq && (e.map_key === mapKey || e.map_key === undefined)
@@ -109,7 +134,7 @@ export class WorldStore {
 
   // ── Subscription management ──
 
-  subscribe(mapKey: MapKey, cb: (events: GameEvent[], buildings: Building[]) => void): () => void {
+  subscribe(mapKey: MapKey, cb: (events: GameEvent[], buildings: Building[], workers: Worker[]) => void): () => void {
     let subs = this.subscribers.get(mapKey);
     if (!subs) {
       subs = new Set();
@@ -119,10 +144,10 @@ export class WorldStore {
     return () => subs!.delete(cb);
   }
 
-  broadcast(mapKey: MapKey, events: GameEvent[], buildings: Building[]) {
+  broadcast(mapKey: MapKey, events: GameEvent[], buildings: Building[], workers: Worker[]) {
     const subs = this.subscribers.get(mapKey);
     if (subs) {
-      for (const cb of subs) cb(events, buildings);
+      for (const cb of subs) cb(events, buildings, workers);
     }
   }
 
@@ -133,7 +158,18 @@ export class WorldStore {
     for (const [k, v] of this.players) players[k] = v;
     const buildings: Record<string, Building> = {};
     for (const [k, v] of this.buildings) buildings[k] = v;
-    return { tick: this.tick, seq: this.seq, players, buildings, marketPrices: this.marketPrices };
+    const workers: Record<string, Worker> = {};
+    for (const [k, v] of this.workers) workers[k] = v;
+    const taskQueue: Record<string, WorkerTask> = {};
+    for (const [k, v] of this.taskQueue) taskQueue[k] = v;
+    return {
+      tick: this.tick, seq: this.seq, players, buildings,
+      marketPrices: this.marketPrices,
+      supplyPressure: { ...this.supplyPressure },
+      workers,
+      taskQueue,
+      taskCounter: this.taskCounter,
+    };
   }
 
   static fromSnapshot(payload: WorldSnapshotPayload, seed: number): WorldStore {
@@ -146,6 +182,39 @@ export class WorldStore {
 
     if (payload.marketPrices) {
       store.marketPrices = payload.marketPrices;
+    }
+
+    if (payload.supplyPressure) {
+      store.supplyPressure = { ...store.supplyPressure, ...payload.supplyPressure };
+    }
+
+    // Restore workers
+    if (payload.workers) {
+      store.workers = new Map(Object.entries(payload.workers));
+      // Restore workerCounter from existing worker IDs
+      for (const id of store.workers.keys()) {
+        const n = parseInt(id.replace("wrk_", ""), 10);
+        if (n > store.workerCounter) store.workerCounter = n;
+      }
+      // Migration: remove legacy fields, backfill worker_status
+      for (const w of store.workers.values()) {
+        const legacy = w as unknown as Record<string, unknown>;
+        delete legacy.route_index;
+        delete legacy.current_route;
+        if (!w.worker_status) w.worker_status = "active";
+        // Reset workers mid-route to idle since task queue is new
+        if (!w.current_task_id && w.state !== "idle" && w.state !== "returning_to_base" && w.state !== "unloading") {
+          w.state = "idle";
+        }
+      }
+    }
+
+    // Restore task queue
+    if (payload.taskQueue) {
+      store.taskQueue = new Map(Object.entries(payload.taskQueue));
+    }
+    if (payload.taskCounter) {
+      store.taskCounter = payload.taskCounter;
     }
 
     // Re-link buildings to tiles
@@ -205,6 +274,36 @@ export class WorldStore {
         if (building.status !== "suspended") continue;
         building.status = "active";
         console.log(`Migration: reactivated ${building.entity_id} (${building.class})`);
+      }
+    }
+
+    // Backfill capacity on buildings missing it
+    for (const building of store.buildings.values()) {
+      if (!building.capacity) {
+        building.capacity = BUILDING_DEFS[building.class].capacity;
+        console.log(`Migration: set capacity ${building.capacity} on ${building.entity_id} (${building.class})`);
+      }
+    }
+
+    // Migration: spawn workers for existing admin outposts if no workers exist
+    if (store.workers.size === 0) {
+      for (const building of store.buildings.values()) {
+        if (building.class !== "admin_outpost") continue;
+        for (let i = 0; i < STARTING_WORKERS; i++) {
+          const wid = `wrk_${++store.workerCounter}`;
+          store.workers.set(wid, {
+            entity_id: wid,
+            owner_id: building.owner_id,
+            map_key: building.map_key,
+            x: building.location.x,
+            y: building.location.y,
+            inventory: {},
+            capacity: WORKER_CAPACITY,
+            state: "idle",
+            worker_status: "active",
+          });
+          console.log(`Migration: spawned worker ${wid} for admin outpost ${building.entity_id}`);
+        }
       }
     }
 

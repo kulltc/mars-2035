@@ -1,6 +1,7 @@
 import React from "react";
 import { useGameStore } from "../state/store.js";
-import { BUILDING_DEFS, type BuildingClass } from "@mars-2035/shared";
+import { BUILDING_DEFS, WORKER_COST, type BuildingClass } from "@mars-2035/shared";
+import { submitCommand } from "../api/client.js";
 
 const PLACEABLE: BuildingClass[] = ["admin_outpost", "mine", "port"];
 
@@ -22,6 +23,7 @@ export function CommandPanel() {
   const buildMode = useGameStore((s) => s.buildMode);
   const setBuildMode = useGameStore((s) => s.setBuildMode);
   const currentMap = useGameStore((s) => s.currentMap);
+  const workers = useGameStore((s) => s.workers);
 
   if (!player) return null;
 
@@ -31,6 +33,12 @@ export function CommandPanel() {
   const hasAdminOutpost = mapKey
     ? !!player.map_accounts?.[mapKey]?.admin_outpost_building_id
     : false;
+
+  const myWorkerCount = workers.filter((w) => w.owner_id === player.entity_id).length;
+  const workerCostStr = Object.entries(WORKER_COST)
+    .filter(([, v]) => v && v > 0)
+    .map(([mat, amt]) => `${amt} ${mat}`)
+    .join(", ");
 
   return (
     <div style={panelStyle}>
@@ -66,6 +74,21 @@ export function CommandPanel() {
           );
         })}
       </div>
+
+      {/* Buy Worker */}
+      {hasAdminOutpost && mapKey && (
+        <div style={{ marginTop: 8 }}>
+          <h3 style={{ marginBottom: 4 }}>Workers ({myWorkerCount})</h3>
+          <button
+            onClick={() => submitCommand("buy_worker", { map_key: mapKey })}
+            style={{ ...btnStyle, backgroundColor: "#0f3460", color: "#e0e0e0", cursor: "pointer" }}
+            title={`Cost: ${workerCostStr}`}
+          >
+            <div>Buy Worker</div>
+            <div style={{ fontSize: 10, opacity: 0.7 }}>{workerCostStr}</div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

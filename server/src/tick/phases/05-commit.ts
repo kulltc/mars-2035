@@ -26,6 +26,7 @@ export function processCommit(store: WorldStore) {
     const globalEvents = byMap.get("__global__") ?? [];
     const allEvents = [...events, ...globalEvents];
     const buildings = store.getBuildingsByMap(mapKey);
-    for (const cb of subs) cb(allEvents, buildings);
+    const workers = store.getWorkersByMap(mapKey);
+    for (const cb of subs) cb(allEvents, buildings, workers);
   }
 }

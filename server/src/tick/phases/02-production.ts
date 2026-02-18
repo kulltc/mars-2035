@@ -1,3 +1,4 @@
+import { remainingCapacity } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 
 export function processProduction(store: WorldStore) {
@@ -6,7 +7,10 @@ export function processProduction(store: WorldStore) {
     if (building.status !== "active") continue;
     if (!building.resource_type || !building.production_per_tick) continue;
 
-    const amount = building.production_per_tick;
+    const remaining = remainingCapacity(building.inventory, building.capacity);
+    if (remaining <= 0) continue;
+
+    const amount = Math.min(building.production_per_tick, remaining);
     building.inventory[building.resource_type] =
       (building.inventory[building.resource_type] ?? 0) + amount;
 

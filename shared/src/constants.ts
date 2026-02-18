@@ -17,13 +17,15 @@ export const TICK_INTERVAL_MS = 5_000; // 5s for dev
 export interface BuildingDef {
   upkeep_per_tick: number;
   cost: Assets;
+  capacity: number;
   production_per_tick?: number; // base, multiplied by richness for mines
+  build_ticks: number;
 }
 
 export const BUILDING_DEFS: Record<BuildingClass, BuildingDef> = {
-  admin_outpost: { upkeep_per_tick: 0, cost: {} },
-  mine: { upkeep_per_tick: 2, cost: { money: 100 }, production_per_tick: 5 },
-  port: { upkeep_per_tick: 3, cost: { money: 150 } },
+  admin_outpost: { upkeep_per_tick: 0, cost: {}, capacity: 2000, build_ticks: 0 },
+  mine: { upkeep_per_tick: 2, cost: { money: 100 }, capacity: 50, production_per_tick: 5, build_ticks: 3 },
+  port: { upkeep_per_tick: 3, cost: { money: 150 }, capacity: 200, build_ticks: 5 },
 };
 
 // ── Market ──
@@ -40,6 +42,11 @@ export const MARKET_VOLATILITY = 0.1;
 export const MARKET_PRICE_MIN = 0.2;
 export const MARKET_PRICE_MAX = 10.0;
 
+// ── Supply pressure ──
+
+export const SUPPLY_PRESSURE_FACTOR = 0.002;
+export const SUPPLY_PRESSURE_DECAY = 0.5;
+
 // ── Resource generation ──
 
 export const RESOURCE_DENSITY = 0.07; // ~7% of tiles have resources
@@ -54,6 +61,28 @@ export const RESOURCE_TYPES: ResourceType[] = [
 // ── Starting assets ──
 
 export const STARTING_MONEY = 500;
+
+// ── Workers ──
+
+export const WORKER_CAPACITY = 20;
+export const WORKER_UPKEEP = 2;
+export const SUSPENSION_DESTROY_TICKS = 100;
+export const STARTING_WORKERS = 2;
+export const WORKER_COST: Assets = { money: 75 };
+
+// ── Inventory helpers ──
+
+export function totalInventory(inv: Assets): number {
+  let sum = 0;
+  for (const [k, v] of Object.entries(inv)) {
+    if (k !== "money" && v) sum += v;
+  }
+  return sum;
+}
+
+export function remainingCapacity(inv: Assets, cap: number): number {
+  return Math.max(0, cap - totalInventory(inv));
+}
 
 // ── Viewport ──
 

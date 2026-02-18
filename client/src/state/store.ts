@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type {
-  Player, Building, Tile, GameEvent, WorldMeta, MarketPrices,
+  Player, Building, Tile, GameEvent, WorldMeta, MarketPrices, Worker,
 } from "@mars-2035/shared";
 
 export interface GameState {
@@ -29,6 +29,16 @@ export interface GameState {
   buildings: Building[];
   setBuildings: (buildings: Building[]) => void;
   updateBuilding: (building: Building) => void;
+
+  // Workers on current map
+  workers: Worker[];
+  setWorkers: (workers: Worker[]) => void;
+  workerPrevPositions: Map<string, { x: number; y: number }>;
+  workerUpdateAt: number;
+
+  // Selected worker
+  selectedWorkerId: string | null;
+  setSelectedWorkerId: (id: string | null) => void;
 
   // Selected tile
   selectedTile: { x: number; y: number } | null;
@@ -84,6 +94,21 @@ export const useGameStore = create<GameState>((set) => ({
         b.entity_id === building.entity_id ? building : b
       ),
     })),
+
+  workers: [],
+  setWorkers: (workers) =>
+    set((state) => {
+      const prev = new Map<string, { x: number; y: number }>();
+      for (const w of state.workers) {
+        prev.set(w.entity_id, { x: w.x, y: w.y });
+      }
+      return { workers, workerPrevPositions: prev, workerUpdateAt: Date.now() };
+    }),
+  workerPrevPositions: new Map(),
+  workerUpdateAt: 0,
+
+  selectedWorkerId: null,
+  setSelectedWorkerId: (selectedWorkerId) => set({ selectedWorkerId }),
 
   selectedTile: null,
   setSelectedTile: (selectedTile) => set({ selectedTile }),

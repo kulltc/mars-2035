@@ -1,10 +1,12 @@
 import React from "react";
 import { useGameStore } from "../state/store.js";
+import { totalInventory, SUSPENSION_DESTROY_TICKS } from "@mars-2035/shared";
 
 export function TileInfo() {
   const selectedTile = useGameStore((s) => s.selectedTile);
   const tiles = useGameStore((s) => s.tiles);
   const buildings = useGameStore((s) => s.buildings);
+  const world = useGameStore((s) => s.world);
 
   if (!selectedTile) {
     return <div style={panelStyle}>Select a tile to inspect</div>;
@@ -37,7 +39,12 @@ export function TileInfo() {
             </strong>{" "}
             <span style={{ color: "#888", fontSize: 11 }}>({building.entity_id})</span>
           </div>
-          <div>Status: <span style={{ color: building.status === "suspended" ? "#e57373" : "#81c784" }}>{building.status}</span></div>
+          <div>Status: <span style={{ color: building.status === "suspended" ? "#e57373" : building.status === "constructing" ? "#ffb74d" : "#81c784" }}>{building.status}</span></div>
+          {building.status === "suspended" && building.suspended_at_tick != null && world && (
+            <div style={{ fontSize: 11, color: "#e57373" }}>
+              Decays in {Math.max(0, SUSPENSION_DESTROY_TICKS - (world.tick - building.suspended_at_tick))} ticks
+            </div>
+          )}
           <div style={{ fontSize: 11, color: "#888" }}>Owner: {building.owner_id}</div>
           {building.production_per_tick && (
             <div>
@@ -45,6 +52,26 @@ export function TileInfo() {
               {building.resource_type})
             </div>
           )}
+          {/* Capacity bar */}
+          {building.capacity > 0 && (() => {
+            const used = totalInventory(building.inventory);
+            const pct = Math.min(100, (used / building.capacity) * 100);
+            return (
+              <div style={{ marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: "#aaa", marginBottom: 2 }}>
+                  Storage: {used.toFixed(0)} / {building.capacity}
+                </div>
+                <div style={{ height: 6, backgroundColor: "#333", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{
+                    width: `${pct}%`,
+                    height: "100%",
+                    backgroundColor: pct > 90 ? "#e57373" : pct > 60 ? "#ffb74d" : "#81c784",
+                    borderRadius: 3,
+                  }} />
+                </div>
+              </div>
+            );
+          })()}
           {/* Inventory */}
           <div style={{ marginTop: 4 }}>
             <div style={{ fontWeight: "bold", fontSize: 12, color: "#aaa" }}>Inventory:</div>

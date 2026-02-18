@@ -9,6 +9,8 @@ import { BuildingPanel } from "./components/BuildingPanel.js";
 import { MarketInfo } from "./components/MarketInfo.js";
 import { EventLog } from "./components/EventLog.js";
 import { CommandPanel } from "./components/CommandPanel.js";
+import { WorkerInfo } from "./components/WorkerInfo.js";
+import { WorkerPanel } from "./components/WorkerPanel.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -186,6 +188,7 @@ export function App() {
         </div>
         <PlayerDashboard />
         <CommandPanel />
+        <WorkerPanel />
         <MarketInfo />
       </div>
 
@@ -201,6 +204,7 @@ export function App() {
         borderLeft: "1px solid #333",
       }}>
         <TileInfo />
+        <WorkerInfo />
         <BuildingPanel />
         <EventLog />
       </div>

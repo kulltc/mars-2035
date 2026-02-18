@@ -75,8 +75,10 @@ export interface Building {
   location: Location;
   map_key: MapKey;
   status: BuildingStatus;
+  suspended_at_tick?: number;
   upkeep_per_tick: number;
   inventory: Assets;
+  capacity: number;
   // Mine-specific
   resource_type?: ResourceType;
   production_per_tick?: number;
@@ -84,6 +86,57 @@ export interface Building {
   auto_sell?: Partial<Record<ResourceType, AutoSellRule>>;
   // Routes: move resources to other buildings each tick
   outgoing_routes?: OutgoingRoute[];
+}
+
+// ── Worker Task ──
+
+export type WorkerTaskType = "pickup" | "dropoff" | "construct";
+
+export interface WorkerTaskBase {
+  id: string;
+  type: WorkerTaskType;
+  owner_id: string;
+  map_key: MapKey;
+}
+
+export interface PickupTask extends WorkerTaskBase {
+  type: "pickup";
+  from_building_id: string;
+  to_building_id: string;
+  resource: MaterialType;
+}
+
+export interface DropoffTask extends WorkerTaskBase {
+  type: "dropoff";
+  building_id: string;
+  resource: MaterialType;
+}
+
+export interface ConstructTask extends WorkerTaskBase {
+  type: "construct";
+  building_id: string;
+  ticks_remaining: number;
+}
+
+export type WorkerTask = PickupTask | DropoffTask | ConstructTask;
+
+// ── Worker ──
+
+export type WorkerState = "idle" | "moving_to_pickup" | "picking_up" | "moving_to_dropoff" | "dropping_off" | "returning_to_base" | "unloading" | "moving_to_construct" | "constructing";
+
+export type WorkerStatus = "active" | "inactive";
+
+export interface Worker {
+  entity_id: string;
+  owner_id: string;
+  map_key: MapKey;
+  x: number;
+  y: number;
+  inventory: Assets;
+  capacity: number;
+  state: WorkerState;
+  worker_status: WorkerStatus;
+  current_task_id?: string;
 }
 
 // ── Market ──
@@ -120,7 +173,12 @@ export type EventType =
   | "route_executed"
   | "command_failed"
   | "player_registered"
-  | "tick_complete";
+  | "tick_complete"
+  | "worker_spawned"
+  | "worker_pickup"
+  | "worker_dropoff"
+  | "construction_complete"
+  | "building_destroyed";
 
 export interface GameEvent {
   world_id: string;
@@ -140,7 +198,10 @@ export type CommandType =
   | "export"
   | "configure_auto_sell"
   | "configure_route"
-  | "delete_route";
+  | "delete_route"
+  | "buy_worker"
+  | "sell_building"
+  | "remove_worker";
 
 export interface Command {
   id: string;

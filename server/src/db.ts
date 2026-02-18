@@ -12,6 +12,10 @@ export interface WorldSnapshotPayload {
   players: Record<string, import("@mars-2035/shared").Player>;
   buildings: Record<string, import("@mars-2035/shared").Building>;
   marketPrices?: import("@mars-2035/shared").MarketPrices;
+  supplyPressure?: Record<string, number>;
+  workers?: Record<string, import("@mars-2035/shared").Worker>;
+  taskQueue?: Record<string, import("@mars-2035/shared").WorkerTask>;
+  taskCounter?: number;
 }
 
 export async function initDb() {

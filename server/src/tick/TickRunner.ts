@@ -4,7 +4,7 @@ import { updateMarketPrices } from "../systems/market.js";
 import { processCommands } from "./phases/01-commands.js";
 import { processProduction } from "./phases/02-production.js";
 import { processAutoSell } from "./phases/02b-autosell.js";
-import { processRoutes } from "./phases/02c-routes.js";
+import { processWorkers } from "./phases/02d-workers.js";
 import { processUpkeep } from "./phases/03-upkeep.js";
 import { processCommit } from "./phases/05-commit.js";
 import { saveSnapshot } from "../db.js";
@@ -36,21 +36,19 @@ export class TickRunner {
     this.store.tick++;
     const t0 = performance.now();
 
-    // 1. Update market prices (so displayed price = sell price this tick)
+    // 1. Update market prices (with supply pressure)
     updateMarketPrices(this.store);
     // 2. Process player commands
     processCommands(this.store);
     // 3. Mines produce resources
     processProduction(this.store);
-    // 4. Routes move resources between buildings
-    processRoutes(this.store);
-    // 5. Ports auto-sell resources at market price
-    processAutoSell(this.store);
-    // 6. Routes again (move auto-sell revenue, e.g. money from port → admin)
-    processRoutes(this.store);
-    // 7. Deduct upkeep from admin outpost
+    // 4. Deduct upkeep from admin outpost (before workers so status is settled)
     processUpkeep(this.store);
-    // 8. Broadcast events to WS clients
+    // 5. Workers move resources along routes
+    processWorkers(this.store);
+    // 6. Ports auto-sell resources at market price
+    processAutoSell(this.store);
+    // 7. Broadcast events to WS clients
     processCommit(this.store);
 
     const elapsed = (performance.now() - t0).toFixed(1);

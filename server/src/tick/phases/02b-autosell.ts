@@ -24,6 +24,9 @@ export function processAutoSell(store: WorldStore) {
       building.inventory[res] = 0;
       building.inventory.money = (building.inventory.money ?? 0) + revenue;
 
+      // Supply pressure
+      store.supplyPressure[res] = (store.supplyPressure[res] ?? 0) + available;
+
       store.pushEvent(
         "auto_sell",
         {
