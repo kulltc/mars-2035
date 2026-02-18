@@ -947,6 +947,71 @@ body {
   50% { opacity: 0.8; }
 }
 
+/* ── Worker List Panel ── */
+.worker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.worker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 12px;
+}
+.worker-row:hover { background: var(--bg-hover); }
+
+/* ── Tile Detail ── */
+.tile-detail {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 20;
+  width: 260px;
+  background: var(--bg-panel);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: slideUp 0.2s ease-out;
+}
+
+.tile-detail .td-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tile-detail .td-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.tile-detail .td-title { font-weight: 700; font-size: 14px; }
+.tile-detail .td-coords { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+
+.tile-detail .td-close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 4px;
+  line-height: 1;
+}
+.tile-detail .td-close:hover { color: var(--text-primary); }
+
 /* ── Utility ── */
 .text-money { color: var(--money); }
 .text-muted { color: var(--text-muted); }

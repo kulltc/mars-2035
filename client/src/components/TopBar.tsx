@@ -9,6 +9,7 @@ export function TopBar() {
   const currentMap = useGameStore((s) => s.currentMap);
   const toggleMarket = useGameStore((s) => s.toggleMarket);
   const toggleTechTree = useGameStore((s) => s.toggleTechTree);
+  const toggleWorkers = useGameStore((s) => s.toggleWorkers);
   const showMarket = useGameStore((s) => s.showMarket);
   const logout = useGameStore((s) => s.logout);
 
@@ -26,11 +27,11 @@ export function TopBar() {
 
   // Key raw materials
   const rawMats = [
-    { key: "steel", label: "Fe", color: "#ff8a65" },
-    { key: "silicon", label: "Si", color: "#90caf9" },
-    { key: "polymer", label: "Po", color: "#ce93d8" },
-    { key: "rare_earth", label: "RE", color: "#ffcc80" },
-    { key: "carbon", label: "C", color: "#a5d6a7" },
+    { key: "steel", label: "Fe", color: "#ff8a65", name: "Steel" },
+    { key: "silicon", label: "Si", color: "#90caf9", name: "Silicon" },
+    { key: "polymer", label: "Po", color: "#ce93d8", name: "Polymer" },
+    { key: "rare_earth", label: "RE", color: "#ffcc80", name: "Rare Earth" },
+    { key: "carbon", label: "C", color: "#a5d6a7", name: "Carbon" },
   ];
 
   return (
@@ -43,7 +44,7 @@ export function TopBar() {
       <div className="top-bar-divider" />
 
       {/* Money */}
-      <div className="resource-pill money">
+      <div className="resource-pill money" title="Money">
         <span className="label">$</span>
         <span className="value">{money.toFixed(0)}</span>
       </div>
@@ -53,7 +54,7 @@ export function TopBar() {
         const val = inv[m.key as keyof typeof inv] ?? 0;
         if (val === 0 && !adminBuilding) return null;
         return (
-          <div key={m.key} className="resource-pill">
+          <div key={m.key} className="resource-pill" title={m.name}>
             <span className="label" style={{ color: m.color }}>{m.label}</span>
             <span className="value">{val > 0 ? val.toFixed(0) : "0"}</span>
           </div>
@@ -63,7 +64,12 @@ export function TopBar() {
       <div className="top-bar-divider" />
 
       {/* Workers */}
-      <div className="resource-pill">
+      <div
+        className="resource-pill"
+        title="Workers"
+        style={{ cursor: "pointer" }}
+        onClick={toggleWorkers}
+      >
         <span className="label" style={{ color: "var(--accent)" }}>W</span>
         <span className="value">{activeWorkers}/{myWorkers.length}</span>
       </div>

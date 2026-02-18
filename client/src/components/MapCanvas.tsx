@@ -738,6 +738,21 @@ export function MapCanvas() {
     e.preventDefault();
   }, []);
 
+  // Camera target (locate worker)
+  const cameraTarget = useGameStore((s) => s.cameraTarget);
+  const setCameraTarget = useGameStore((s) => s.setCameraTarget);
+  useEffect(() => {
+    if (!cameraTarget || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+    const ts = BASE_TILE * cameraRef.current.zoom;
+    cameraRef.current.x = cameraTarget.x - w / ts / 2 + 0.5;
+    cameraRef.current.y = cameraTarget.y - h / ts / 2 + 0.5;
+    setCameraTarget(null);
+  }, [cameraTarget, setCameraTarget]);
+
   // Keyboard
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {

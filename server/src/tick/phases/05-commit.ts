@@ -29,4 +29,9 @@ export function processCommit(store: WorldStore) {
     const workers = store.getWorkersByMap(mapKey);
     for (const cb of subs) cb(allEvents, buildings, workers);
   }
+
+  // Prune old events to prevent unbounded memory growth
+  if (store.events.length > 500) {
+    store.events = store.events.slice(-500);
+  }
 }

@@ -119,6 +119,12 @@ export interface GameState {
   toggleMarket: () => void;
   showTechTree: boolean;
   toggleTechTree: () => void;
+  showWorkers: boolean;
+  toggleWorkers: () => void;
+
+  // ── Camera target (for locate-worker) ──
+  cameraTarget: { x: number; y: number } | null;
+  setCameraTarget: (target: { x: number; y: number } | null) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -250,4 +256,10 @@ export const useGameStore = create<GameState>((set) => ({
   toggleMarket: () => set((state) => ({ showMarket: !state.showMarket })),
   showTechTree: false,
   toggleTechTree: () => set((state) => ({ showTechTree: !state.showTechTree })),
+  showWorkers: false,
+  toggleWorkers: () => set((state) => ({ showWorkers: !state.showWorkers })),
+
+  // ── Camera target ──
+  cameraTarget: null,
+  setCameraTarget: (cameraTarget) => set({ cameraTarget }),
 }));

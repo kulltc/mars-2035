@@ -12,6 +12,8 @@ import { Notifications } from "./components/Notifications.js";
 import { ResourcePicker } from "./components/ResourcePicker.js";
 import { TechTree } from "./components/TechTree.js";
 import { MarketPanel } from "./components/MarketPanel.js";
+import { WorkerListPanel } from "./components/WorkerListPanel.js";
+import { TileDetail } from "./components/TileDetail.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -24,6 +26,7 @@ export function App() {
   const logout = useGameStore((s) => s.logout);
   const showTechTree = useGameStore((s) => s.showTechTree);
   const showMarket = useGameStore((s) => s.showMarket);
+  const showWorkers = useGameStore((s) => s.showWorkers);
 
   // Connect to map via WS
   useMapSubscription();
@@ -69,6 +72,7 @@ export function App() {
       <div className="game-main">
         <MapCanvas />
         <BuildingDetail />
+        <TileDetail />
         <WorkerDetail />
         <ResourcePicker />
         {showMarket && <MarketPanel />}
@@ -76,6 +80,7 @@ export function App() {
       <BuildToolbar />
       <Notifications />
       {showTechTree && <TechTree />}
+      {showWorkers && <WorkerListPanel />}
     </div>
   );
 }
