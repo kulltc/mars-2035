@@ -7,6 +7,8 @@ import {
   type ConstructTask,
   remainingCapacity,
   totalInventory,
+  WORKER_MONEY_CAPACITY,
+  BUILDING_DEFS,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 
@@ -30,8 +32,9 @@ function clearWorkerTask(store: WorldStore, worker: Worker, removeFromQueue = tr
 }
 
 export function processWorkers(store: WorldStore) {
-  // ── Task generation: create pickup tasks from buildings with routes ──
+  // ── Task generation ──
   generatePickupTasks(store);
+  generateConstructTasks(store);
 
   // ── Idle worker dispatch ──
   for (const worker of store.workers.values()) {
@@ -77,12 +80,26 @@ export function processWorkers(store: WorldStore) {
         if (!src) { resetWorker(store, worker); break; }
 
         const res = task.resource;
-        const available = src.inventory[res] ?? 0;
-        const workerRemaining = worker.capacity - totalInventory(worker.inventory);
+        // Check output_buffer first, then inventory
+        const bufferAvailable = src.output_buffer?.[res] ?? 0;
+        const invAvailable = src.inventory[res] ?? 0;
+        const available = bufferAvailable + invAvailable;
+        const workerRemaining = res === "money"
+          ? Math.max(0, WORKER_MONEY_CAPACITY - (worker.inventory.money ?? 0))
+          : worker.capacity - totalInventory(worker.inventory);
         const amount = Math.min(available, workerRemaining);
 
         if (amount > 0) {
-          src.inventory[res] = (src.inventory[res] ?? 0) - amount;
+          // Deduct from output_buffer first, then inventory
+          let remaining = amount;
+          if (bufferAvailable > 0 && remaining > 0) {
+            const fromBuffer = Math.min(bufferAvailable, remaining);
+            src.output_buffer![res] = bufferAvailable - fromBuffer;
+            remaining -= fromBuffer;
+          }
+          if (remaining > 0) {
+            src.inventory[res] = invAvailable - remaining;
+          }
           worker.inventory[res] = (worker.inventory[res] ?? 0) + amount;
           store.pushEvent("worker_pickup", {
             worker_id: worker.entity_id,
@@ -255,6 +272,43 @@ function generatePickupTasks(store: WorldStore) {
   }
 }
 
+function generateConstructTasks(store: WorldStore) {
+  for (const building of store.buildings.values()) {
+    if (building.status !== "constructing") continue;
+
+    // Check if a construct task already exists for this building
+    const hasTask = taskExists(store, "construct", (t: ConstructTask) =>
+      t.building_id === building.entity_id
+    );
+    if (hasTask) continue;
+
+    // Check if a worker is already actively constructing it
+    let workerHasIt = false;
+    for (const worker of store.workers.values()) {
+      if (!worker.current_task_id) continue;
+      const task = store.taskQueue.get(worker.current_task_id);
+      if (task?.type === "construct" && (task as ConstructTask).building_id === building.entity_id) {
+        workerHasIt = true;
+        break;
+      }
+    }
+    if (workerHasIt) continue;
+
+    // Re-create construct task (full build time — progress was lost with the task)
+    const def = BUILDING_DEFS[building.class];
+    const taskId = `task_${++store.taskCounter}`;
+    const task: ConstructTask = {
+      id: taskId,
+      type: "construct",
+      owner_id: building.owner_id,
+      map_key: building.map_key,
+      building_id: building.entity_id,
+      ticks_remaining: def.build_ticks,
+    };
+    store.taskQueue.set(taskId, task);
+  }
+}
+
 function taskExists<T extends WorkerTask>(store: WorldStore, type: T["type"], pred: (t: T) => boolean): boolean {
   for (const task of store.taskQueue.values()) {
     if (task.type === type && pred(task as T)) return true;
@@ -295,12 +349,46 @@ function findOrCreateDropoffTask(store: WorldStore, ownerId: string, mapKey: str
 
 // ── Idle worker dispatch ──
 
+function matchesFilter(store: WorldStore, worker: Worker, task: WorkerTask): boolean {
+  const filter = worker.task_filter;
+  if (!filter) return true;
+
+  // Task type check
+  if (filter.task_types && filter.task_types.length > 0) {
+    if (!filter.task_types.includes(task.type)) return false;
+  }
+
+  // Resource check (only for pickup tasks)
+  if (filter.resources && filter.resources.length > 0 && task.type === "pickup") {
+    const pt = task as PickupTask;
+    if (!filter.resources.includes(pt.resource)) return false;
+  }
+
+  // Area check — look up building location
+  if (filter.area) {
+    let building: { location: { x: number; y: number } } | undefined;
+    if (task.type === "pickup") {
+      building = store.buildings.get((task as PickupTask).from_building_id);
+    } else if (task.type === "construct") {
+      building = store.buildings.get((task as ConstructTask).building_id);
+    }
+    if (building) {
+      const { x, y } = building.location;
+      const a = filter.area;
+      if (x < a.x1 || x > a.x2 || y < a.y1 || y > a.y2) return false;
+    }
+  }
+
+  return true;
+}
+
 function claimTask(store: WorldStore, worker: Worker) {
   for (const task of store.taskQueue.values()) {
     if (task.owner_id !== worker.owner_id) continue;
     if (task.map_key !== worker.map_key) continue;
     if (task.type !== "pickup" && task.type !== "construct") continue;
     if (isTaskClaimed(store, task.id)) continue;
+    if (!matchesFilter(store, worker, task)) continue;
 
     worker.current_task_id = task.id;
     if (task.type === "pickup") {

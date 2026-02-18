@@ -7,6 +7,30 @@ export const MATERIAL_TYPES = [
   "polymer",
   "rare_earth",
   "carbon",
+  // Morphic Chain
+  "ferrite_alloy",
+  "morphic_composite",
+  "morphic_core",
+  "servo_cortex",
+  "autonomic_matrix",
+  // Toroidin Chain
+  "thermoplast",
+  "lattice_fiber",
+  "toroidin_plate",
+  "muphrid_cell",
+  "paradox_weave",
+  // Cryogenic Chain
+  "cryite",
+  "null_phase_gel",
+  "xenotherm_crystal",
+  "absolute_lattice",
+  "zero_point_shard",
+  // Psychophysical Chain
+  "psi_crystal",
+  "esper_thread",
+  "psychon_core",
+  "peep_shield",
+  "noetic_matrix",
 ] as const;
 
 export type MaterialType = (typeof MATERIAL_TYPES)[number];
@@ -52,6 +76,30 @@ export const BUILDING_CLASSES = [
   "admin_outpost",
   "mine",
   "port",
+  // Morphic Chain
+  "smelter",
+  "magnetic_press",
+  "morphic_forge",
+  "servo_assembly",
+  "replication_chamber",
+  // Toroidin Chain
+  "polymer_kiln",
+  "crystal_grower",
+  "toroidin_foundry",
+  "muphrid_lab",
+  "solar_loom",
+  // Cryogenic Chain
+  "cryo_distillery",
+  "phase_condenser",
+  "xenotherm_reactor",
+  "deep_freeze_synth",
+  "iceworld_refinery",
+  // Psychophysical Chain
+  "resonance_tuner",
+  "neural_loom",
+  "psychophysical_amp",
+  "dampening_forge",
+  "consciousness_engine",
 ] as const;
 
 export type BuildingClass = (typeof BUILDING_CLASSES)[number];
@@ -76,9 +124,9 @@ export interface Building {
   map_key: MapKey;
   status: BuildingStatus;
   suspended_at_tick?: number;
-  upkeep_per_tick: number;
   inventory: Assets;
   capacity: number;
+  output_buffer?: Assets;
   // Mine-specific
   resource_type?: ResourceType;
   production_per_tick?: number;
@@ -126,6 +174,12 @@ export type WorkerState = "idle" | "moving_to_pickup" | "picking_up" | "moving_t
 
 export type WorkerStatus = "active" | "inactive";
 
+export interface WorkerFilter {
+  task_types?: WorkerTaskType[];
+  resources?: MaterialType[];
+  area?: { x1: number; y1: number; x2: number; y2: number };
+}
+
 export interface Worker {
   entity_id: string;
   owner_id: string;
@@ -137,6 +191,7 @@ export interface Worker {
   state: WorkerState;
   worker_status: WorkerStatus;
   current_task_id?: string;
+  task_filter?: WorkerFilter;
 }
 
 // ── Market ──
@@ -178,7 +233,8 @@ export type EventType =
   | "worker_pickup"
   | "worker_dropoff"
   | "construction_complete"
-  | "building_destroyed";
+  | "building_destroyed"
+  | "processing";
 
 export interface GameEvent {
   world_id: string;
@@ -201,7 +257,8 @@ export type CommandType =
   | "delete_route"
   | "buy_worker"
   | "sell_building"
-  | "remove_worker";
+  | "remove_worker"
+  | "configure_worker";
 
 export interface Command {
   id: string;

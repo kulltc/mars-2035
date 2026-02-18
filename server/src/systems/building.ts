@@ -5,6 +5,7 @@ import {
   type MaterialType,
   type Player,
   BUILDING_DEFS,
+  RESOURCE_TYPES,
   STARTING_MONEY,
   STARTING_WORKERS,
   WORKER_CAPACITY,
@@ -87,6 +88,24 @@ export function placeBuilding(
     }
   }
 
+  // Recipe buildings: require producer buildings for non-raw inputs
+  const def0 = BUILDING_DEFS[buildingClass];
+  if (def0.recipe) {
+    const rawSet = new Set<string>(RESOURCE_TYPES);
+    const playerBuildings = store.getBuildingsByPlayer(player.entity_id);
+    const ownedClasses = new Set(playerBuildings.map((b) => b.class));
+    for (const mat of Object.keys(def0.recipe.inputs)) {
+      if (rawSet.has(mat)) continue;
+      // Find which building produces this material
+      const producer = Object.entries(BUILDING_DEFS).find(
+        ([, d]) => d.recipe?.output === mat
+      );
+      if (producer && !ownedClasses.has(producer[0] as BuildingClass)) {
+        return { ok: false, error: `Requires a ${producer[0].replace(/_/g, " ")} first` };
+      }
+    }
+  }
+
   // Mine: must be on matching resource tile
   if (buildingClass === "mine") {
     if (!tile.resource) {
@@ -104,7 +123,6 @@ export function placeBuilding(
     location,
     map_key: mapKey,
     status: initialStatus,
-    upkeep_per_tick: def.upkeep_per_tick,
     inventory: {},
     capacity: def.capacity,
     resource_type: buildingClass === "mine" ? tile.resource!.type : undefined,
@@ -112,6 +130,7 @@ export function placeBuilding(
       buildingClass === "mine"
         ? (def.production_per_tick ?? 0) * tile.resource!.richness
         : undefined,
+    output_buffer: def.recipe ? {} : undefined,
   };
 
   // Seed admin outpost with starting money

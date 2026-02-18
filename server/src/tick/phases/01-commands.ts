@@ -11,6 +11,7 @@ import type {
   OutgoingRoute,
   Player,
   ResourceType,
+  WorkerFilter,
 } from "@mars-2035/shared";
 import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
@@ -88,7 +89,9 @@ function handleTransfer(store: WorldStore, player: Player, data: Record<string, 
   if (to.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
   if (from.map_key !== to.map_key) return { ok: false, error: "Buildings must be on same map" };
 
-  const available = from.inventory[material] ?? 0;
+  const bufferAvailable = from.output_buffer?.[material] ?? 0;
+  const invAvailable = from.inventory[material] ?? 0;
+  const available = bufferAvailable + invAvailable;
   if (available < amount) return { ok: false, error: `Insufficient ${material} (have ${available.toFixed(1)})` };
 
   // Clamp to destination remaining capacity
@@ -96,7 +99,16 @@ function handleTransfer(store: WorldStore, player: Player, data: Record<string, 
   const actual = Math.min(amount, destRemaining);
   if (actual <= 0) return { ok: false, error: "Destination is full" };
 
-  from.inventory[material] = available - actual;
+  // Deduct from output_buffer first, then inventory
+  let rem = actual;
+  if (bufferAvailable > 0 && rem > 0) {
+    const fromBuf = Math.min(bufferAvailable, rem);
+    from.output_buffer![material] = bufferAvailable - fromBuf;
+    rem -= fromBuf;
+  }
+  if (rem > 0) {
+    from.inventory[material] = invAvailable - rem;
+  }
   to.inventory[material] = (to.inventory[material] ?? 0) + actual;
 
   return {
@@ -129,13 +141,24 @@ function handleExport(store: WorldStore, player: Player, data: Record<string, un
   if (building.class !== "port") return { ok: false, error: "Only ports can export" };
   if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
 
-  const available = building.inventory[material] ?? 0;
+  const bufAvail = building.output_buffer?.[material] ?? 0;
+  const invAvail = building.inventory[material] ?? 0;
+  const available = bufAvail + invAvail;
   if (available < amount) return { ok: false, error: `Insufficient ${material} (have ${available.toFixed(1)})` };
 
   const price = store.marketPrices[material as ResourceType] ?? 1;
   const revenue = Math.round(amount * price * 100) / 100;
 
-  building.inventory[material] = available - amount;
+  // Deduct from output_buffer first, then inventory
+  let rem2 = amount;
+  if (bufAvail > 0 && rem2 > 0) {
+    const fromBuf = Math.min(bufAvail, rem2);
+    building.output_buffer![material] = bufAvail - fromBuf;
+    rem2 -= fromBuf;
+  }
+  if (rem2 > 0) {
+    building.inventory[material] = invAvail - rem2;
+  }
   building.inventory.money = (building.inventory.money ?? 0) + revenue;
 
   // Supply pressure
@@ -312,6 +335,14 @@ function handleSellBuilding(store: WorldStore, player: Player, data: Record<stri
       adminOutpost.inventory[mat as MaterialType] =
         (adminOutpost.inventory[mat as MaterialType] ?? 0) + amount;
     }
+    // Transfer output buffer contents too
+    if (building.output_buffer) {
+      for (const [mat, amount] of Object.entries(building.output_buffer)) {
+        if (!amount || amount <= 0) continue;
+        adminOutpost.inventory[mat as MaterialType] =
+          (adminOutpost.inventory[mat as MaterialType] ?? 0) + amount;
+      }
+    }
   }
 
   // Remove routes referencing this building from other buildings
@@ -401,6 +432,28 @@ function handleRemoveWorker(store: WorldStore, player: Player, data: Record<stri
   };
 }
 
+function handleConfigureWorker(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { worker_id, task_filter } = data as {
+    worker_id: string;
+    task_filter: WorkerFilter | null;
+  };
+
+  const worker = store.workers.get(worker_id);
+  if (!worker) return { ok: false, error: "Worker not found" };
+  if (worker.owner_id !== player.entity_id) return { ok: false, error: "Not your worker" };
+
+  worker.task_filter = task_filter ?? undefined;
+
+  return {
+    ok: true,
+    events: [{
+      type: "worker_spawned",
+      data: { worker_id, owner_id: player.entity_id, map_key: worker.map_key, configured: true },
+      mapKey: worker.map_key,
+    }],
+  };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -413,6 +466,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   buy_worker: handleBuyWorker,
   sell_building: handleSellBuilding,
   remove_worker: handleRemoveWorker,
+  configure_worker: handleConfigureWorker,
 };
 
 // ── Main processor ──

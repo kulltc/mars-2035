@@ -19,6 +19,7 @@ import {
   MAPS_PER_DISTRICT_Y,
   TILES_PER_MAP,
   BASE_MARKET_PRICES,
+  TRADEABLE_TYPES,
   BUILDING_DEFS,
   STARTING_MONEY,
   STARTING_WORKERS,
@@ -37,9 +38,9 @@ export class WorldStore {
   workers = new Map<string, Worker>();
   tiles: Map<MapKey, Map<string, Tile>>; // mapKey → (tileKey → Tile)
   marketPrices: MarketPrices = { ...BASE_MARKET_PRICES };
-  supplyPressure: Record<ResourceType, number> = {
-    steel: 0, silicon: 0, polymer: 0, rare_earth: 0, carbon: 0,
-  };
+  supplyPressure: Record<ResourceType, number> = Object.fromEntries(
+    TRADEABLE_TYPES.map((r) => [r, 0])
+  ) as Record<ResourceType, number>;
 
   // Event log
   events: GameEvent[] = [];
@@ -282,6 +283,15 @@ export class WorldStore {
       if (!building.capacity) {
         building.capacity = BUILDING_DEFS[building.class].capacity;
         console.log(`Migration: set capacity ${building.capacity} on ${building.entity_id} (${building.class})`);
+      }
+    }
+
+    // Migration: add output_buffer to recipe buildings
+    for (const building of store.buildings.values()) {
+      const def = BUILDING_DEFS[building.class];
+      if (def.recipe && !building.output_buffer) {
+        building.output_buffer = {};
+        console.log(`Migration: added output_buffer to ${building.entity_id} (${building.class})`);
       }
     }
 
