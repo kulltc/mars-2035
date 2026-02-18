@@ -171,4 +171,5 @@ const panelStyle: React.CSSProperties = {
   borderRadius: 4,
   fontSize: 13,
   minHeight: 80,
+  flexShrink: 0,
 };

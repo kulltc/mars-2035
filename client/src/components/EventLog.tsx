@@ -103,4 +103,5 @@ const panelStyle: React.CSSProperties = {
   backgroundColor: "#16213e",
   borderRadius: 4,
   fontSize: 13,
+  flexShrink: 0,
 };

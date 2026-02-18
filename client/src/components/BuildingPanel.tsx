@@ -3,14 +3,13 @@ import { useGameStore } from "../state/store.js";
 import { submitCommand } from "../api/client.js";
 import {
   MATERIAL_TYPES,
+  TRADEABLE_TYPES,
   type MaterialType,
   type ResourceType,
   type AutoSellRule,
   type OutgoingRoute,
   type Building,
 } from "@mars-2035/shared";
-
-const RESOURCES: ResourceType[] = ["steel", "silicon", "polymer", "rare_earth", "carbon"];
 
 type LocalAutoSell = Partial<Record<ResourceType, AutoSellRule | null>>;
 
@@ -286,8 +285,18 @@ export function BuildingPanel() {
       {/* ── Auto-sell section (port only) ── */}
       {building.class === "port" && (
         <div>
-          <div style={{ fontWeight: "bold", fontSize: 12, color: "#aaa", marginBottom: 4 }}>Auto-Sell</div>
-          {RESOURCES.map((res) => {
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <span style={{ fontWeight: "bold", fontSize: 12, color: "#aaa" }}>Auto-Sell</span>
+            <button
+              onClick={() => { for (const res of TRADEABLE_TYPES) handleAutoSellChange(res, "any_rate"); }}
+              style={{ ...btnStyle, padding: "1px 6px", fontSize: 10 }}
+            >All Any</button>
+            <button
+              onClick={() => { for (const res of TRADEABLE_TYPES) handleAutoSellChange(res, "off"); }}
+              style={{ ...btnStyle, padding: "1px 6px", fontSize: 10 }}
+            >All Off</button>
+          </div>
+          {TRADEABLE_TYPES.map((res) => {
             const rule = getEffectiveRule(res);
             const currentMode = rule?.mode ?? "off";
             const price = marketPrices?.[res];
@@ -345,6 +354,7 @@ const panelStyle: React.CSSProperties = {
   backgroundColor: "#16213e",
   borderRadius: 4,
   fontSize: 13,
+  flexShrink: 0,
 };
 
 const selectStyle: React.CSSProperties = {

@@ -63,7 +63,9 @@ export async function fetchWorld(): Promise<WorldMeta> {
 export async function fetchMap(
   dx: number, dy: number, mx: number, my: number
 ): Promise<{ map_key: string; tiles: Tile[]; buildings: Building[] }> {
-  const res = await fetch(`${BASE}/api/map/${dx}/${dy}/${mx}/${my}`);
+  const res = await fetch(`${BASE}/api/map/${dx}/${dy}/${mx}/${my}`, {
+    headers: authHeaders(),
+  });
   return res.json();
 }
 

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type {
-  Player, Building, Tile, GameEvent, WorldMeta, MarketPrices, Worker,
+  Player, Building, Tile, GameEvent, WorldMeta, MarketPrices, Worker, WorkerFilter,
 } from "@mars-2035/shared";
 
 export interface GameState {
@@ -55,6 +55,12 @@ export interface GameState {
   // UI
   buildMode: string | null; // building class being placed
   setBuildMode: (mode: string | null) => void;
+  areaDrawMode: string | null; // worker entity_id being configured, or null
+  setAreaDrawMode: (id: string | null) => void;
+  // Optimistic worker filter — tracks local edits before server confirms
+  pendingWorkerFilter: { workerId: string; filter: WorkerFilter | undefined } | null;
+  setPendingWorkerFilter: (workerId: string, filter: WorkerFilter | undefined) => void;
+  clearPendingWorkerFilter: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -124,4 +130,10 @@ export const useGameStore = create<GameState>((set) => ({
 
   buildMode: null,
   setBuildMode: (buildMode) => set({ buildMode }),
+  areaDrawMode: null,
+  setAreaDrawMode: (areaDrawMode) => set({ areaDrawMode }),
+  pendingWorkerFilter: null,
+  setPendingWorkerFilter: (workerId, filter) =>
+    set({ pendingWorkerFilter: { workerId, filter } }),
+  clearPendingWorkerFilter: () => set({ pendingWorkerFilter: null }),
 }));

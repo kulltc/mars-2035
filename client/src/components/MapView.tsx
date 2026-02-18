@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore } from "../state/store.js";
 import { VIEWPORT_W, VIEWPORT_H, TICK_INTERVAL_MS, totalInventory, type Tile, type Building, type Worker } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
@@ -26,12 +26,36 @@ const BUILDING_COLORS: Record<string, string> = {
   admin_outpost: "#4fc3f7",
   mine: "#ffb74d",
   port: "#81c784",
+  // Morphic Chain (warm red-orange tones)
+  smelter: "#e65100", magnetic_press: "#d84315", morphic_forge: "#bf360c",
+  servo_assembly: "#a52714", replication_chamber: "#8b1a1a",
+  // Toroidin Chain (purple tones)
+  polymer_kiln: "#7b1fa2", crystal_grower: "#6a1b9a", toroidin_foundry: "#4a148c",
+  muphrid_lab: "#38006b", solar_loom: "#2c0054",
+  // Cryogenic Chain (cyan/teal tones)
+  cryo_distillery: "#00838f", phase_condenser: "#006064", xenotherm_reactor: "#004d40",
+  deep_freeze_synth: "#00363a", iceworld_refinery: "#002626",
+  // Psychophysical Chain (pink/magenta tones)
+  resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
+  dampening_forge: "#560027", consciousness_engine: "#3e001f",
 };
 
 const BUILDING_ICONS: Record<string, string> = {
   admin_outpost: "\u2302", // ⌂
   mine: "\u26CF",          // ⛏ (pick)
   port: "\u2693",          // ⚓
+  // Morphic Chain
+  smelter: "S", magnetic_press: "M", morphic_forge: "F",
+  servo_assembly: "V", replication_chamber: "R",
+  // Toroidin Chain
+  polymer_kiln: "K", crystal_grower: "G", toroidin_foundry: "T",
+  muphrid_lab: "L", solar_loom: "W",
+  // Cryogenic Chain
+  cryo_distillery: "D", phase_condenser: "P", xenotherm_reactor: "X",
+  deep_freeze_synth: "Z", iceworld_refinery: "I",
+  // Psychophysical Chain
+  resonance_tuner: "N", neural_loom: "E", psychophysical_amp: "A",
+  dampening_forge: "H", consciousness_engine: "C",
 };
 
 export function MapView() {
@@ -48,10 +72,17 @@ export function MapView() {
   const workerUpdateAt = useGameStore((s) => s.workerUpdateAt);
   const selectedWorkerId = useGameStore((s) => s.selectedWorkerId);
   const setSelectedWorkerId = useGameStore((s) => s.setSelectedWorkerId);
+  const areaDrawMode = useGameStore((s) => s.areaDrawMode);
+  const setAreaDrawMode = useGameStore((s) => s.setAreaDrawMode);
+  const pendingWorkerFilter = useGameStore((s) => s.pendingWorkerFilter);
+  const setPendingWorkerFilter = useGameStore((s) => s.setPendingWorkerFilter);
 
   useAnimationFrame();
 
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null);
 
   // Build building index
   const buildingByTile = new Map<string, Building>();
@@ -71,11 +102,11 @@ export function MapView() {
       if (e.key === "ArrowRight") setOffset((o) => ({ ...o, x: o.x + step }));
       if (e.key === "ArrowUp") setOffset((o) => ({ ...o, y: Math.max(0, o.y - step) }));
       if (e.key === "ArrowDown") setOffset((o) => ({ ...o, y: o.y + step }));
-      if (e.key === "Escape") setBuildMode(null);
+      if (e.key === "Escape") { setBuildMode(null); setAreaDrawMode(null); setDragStart(null); setDragEnd(null); }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [setBuildMode]);
+  }, [setBuildMode, setAreaDrawMode]);
 
   const handleTileClick = useCallback(
     async (x: number, y: number) => {
@@ -100,6 +131,57 @@ export function MapView() {
     },
     [buildMode, player, currentMap, setSelectedTile, setBuildMode, setSelectedWorkerId]
   );
+
+  // ── Area draw mouse handlers ──
+  const getTile = useCallback((e: React.MouseEvent) => {
+    if (!mapRef.current) return null;
+    const rect = mapRef.current.getBoundingClientRect();
+    const tx = offset.x + Math.floor((e.clientX - rect.left) / TILE_SIZE);
+    const ty = offset.y + Math.floor((e.clientY - rect.top) / TILE_SIZE);
+    return { x: tx, y: ty };
+  }, [offset]);
+
+  const handleAreaMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!areaDrawMode) return;
+    const tile = getTile(e);
+    if (tile) {
+      setDragStart(tile);
+      setDragEnd(tile);
+      e.preventDefault();
+    }
+  }, [areaDrawMode, getTile]);
+
+  const handleAreaMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!areaDrawMode || !dragStart) return;
+    const tile = getTile(e);
+    if (tile) setDragEnd(tile);
+  }, [areaDrawMode, dragStart, getTile]);
+
+  const handleAreaMouseUp = useCallback(() => {
+    if (!areaDrawMode || !dragStart || !dragEnd) return;
+    const x1 = Math.min(dragStart.x, dragEnd.x);
+    const y1 = Math.min(dragStart.y, dragEnd.y);
+    const x2 = Math.max(dragStart.x, dragEnd.x);
+    const y2 = Math.max(dragStart.y, dragEnd.y);
+
+    const selectedWorker = workers.find((w) => w.entity_id === areaDrawMode);
+    if (selectedWorker) {
+      // Use optimistic filter if available, else server state
+      const existingFilter = (pendingWorkerFilter?.workerId === areaDrawMode
+        ? pendingWorkerFilter.filter
+        : selectedWorker.task_filter) ?? {};
+      const newFilter = { ...existingFilter, area: { x1, y1, x2, y2 } };
+      setPendingWorkerFilter(areaDrawMode, newFilter);
+      submitCommand("configure_worker", {
+        worker_id: areaDrawMode,
+        task_filter: newFilter,
+      });
+    }
+
+    setDragStart(null);
+    setDragEnd(null);
+    setAreaDrawMode(null);
+  }, [areaDrawMode, dragStart, dragEnd, workers, setAreaDrawMode, pendingWorkerFilter, setPendingWorkerFilter]);
 
   // Compute route arrows for selected building
   const routeArrows: Array<{ x1: number; y1: number; x2: number; y2: number; color: string }> = [];
@@ -171,16 +253,13 @@ export function MapView() {
         bg = RESOURCE_COLORS[tile.resource.type] ?? bg;
       }
       if (building) {
-        const bldColor = BUILDING_COLORS[building.class] ?? "#fff";
+        const isOwn = building.owner_id === player?.entity_id;
+        const bldColor = isOwn ? (BUILDING_COLORS[building.class] ?? "#fff") : "#555";
         bg = bldColor;
         label = BUILDING_ICONS[building.class] ?? building.class[0].toUpperCase();
         fontSize = 13;
-        border = `2px solid #fff`;
-        boxShadow = `0 0 4px 1px ${bldColor}`;
-
-        if (building.owner_id === player?.entity_id) {
-          boxShadow = `0 0 6px 2px ${bldColor}, inset 0 0 4px rgba(255,255,255,0.3)`;
-        }
+        border = isOwn ? `2px solid #fff` : `2px solid #888`;
+        boxShadow = isOwn ? `0 0 6px 2px ${bldColor}, inset 0 0 4px rgba(255,255,255,0.3)` : "none";
 
         if (building.status === "suspended") {
           opacity = 0.5;
@@ -243,8 +322,24 @@ export function MapView() {
             Placing: {buildMode} (click tile, Esc to cancel)
           </span>
         )}
+        {areaDrawMode && (
+          <span style={{ color: "#e57373", marginLeft: 8 }}>
+            Draw activity area (click &amp; drag, Esc to cancel)
+          </span>
+        )}
       </div>
-      <div style={{ position: "relative", width: mapW, height: mapH }}>
+      <div
+        ref={mapRef}
+        style={{
+          position: "relative",
+          width: mapW,
+          height: mapH,
+          cursor: areaDrawMode ? "crosshair" : undefined,
+        }}
+        onMouseDown={handleAreaMouseDown}
+        onMouseMove={handleAreaMouseMove}
+        onMouseUp={handleAreaMouseUp}
+      >
         <div style={{ lineHeight: 0 }}>{rows}</div>
         {/* SVG overlay for route arrows and workers */}
         <svg
@@ -320,7 +415,7 @@ export function MapView() {
                 cy += Math.sin(angle) * spread;
               }
 
-              const carrying = totalInventory(w.inventory) > 0;
+              const carrying = totalInventory(w.inventory) > 0 || (w.inventory.money ?? 0) > 0;
               const isInactive = w.worker_status === "inactive";
               const isSelected = w.entity_id === selectedWorkerId;
 
@@ -351,31 +446,39 @@ export function MapView() {
             }
             return circles;
           })()}
+          {/* Drag rectangle while drawing area */}
+          {areaDrawMode && dragStart && dragEnd && (() => {
+            const x = (Math.min(dragStart.x, dragEnd.x) - offset.x) * TILE_SIZE;
+            const y = (Math.min(dragStart.y, dragEnd.y) - offset.y) * TILE_SIZE;
+            const w = (Math.abs(dragEnd.x - dragStart.x) + 1) * TILE_SIZE;
+            const h = (Math.abs(dragEnd.y - dragStart.y) + 1) * TILE_SIZE;
+            return (
+              <rect x={x} y={y} width={w} height={h}
+                fill="rgba(79,195,247,0.15)" stroke="#4fc3f7" strokeWidth={2} />
+            );
+          })()}
+          {/* Saved activity area for selected worker */}
+          {(() => {
+            const sw = selectedWorkerId ? workers.find((w) => w.entity_id === selectedWorkerId) : null;
+            if (!sw) return null;
+            const swFilter = pendingWorkerFilter?.workerId === sw.entity_id
+              ? pendingWorkerFilter.filter
+              : sw.task_filter;
+            if (!swFilter?.area) return null;
+            const a = swFilter.area;
+            const x = (a.x1 - offset.x) * TILE_SIZE;
+            const y = (a.y1 - offset.y) * TILE_SIZE;
+            const w = (a.x2 - a.x1 + 1) * TILE_SIZE;
+            const h = (a.y2 - a.y1 + 1) * TILE_SIZE;
+            return (
+              <rect x={x} y={y} width={w} height={h}
+                fill="none" stroke="#e57373" strokeWidth={2} strokeDasharray="6 3" />
+            );
+          })()}
         </svg>
       </div>
       <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 11, color: "#888", flexWrap: "wrap" }}>
-        {Object.entries(BUILDING_COLORS).map(([cls, color]) => (
-          <span key={cls} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <span style={{
-              display: "inline-block",
-              width: 12,
-              height: 12,
-              backgroundColor: color,
-              border: "1px solid #fff",
-              borderRadius: 2,
-              textAlign: "center",
-              fontSize: 9,
-              lineHeight: "12px",
-              color: "#fff",
-            }}>
-              {BUILDING_ICONS[cls]?.[0] ?? cls[0].toUpperCase()}
-            </span>
-            {cls.replace(/_/g, " ")}
-          </span>
-        ))}
-        <span style={{ marginLeft: 8, borderLeft: "1px solid #444", paddingLeft: 8 }}>
-          Resources:
-        </span>
+        <span>Resources:</span>
         {Object.entries(RESOURCE_COLORS).map(([res, color]) => (
           <span key={res} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
             <span style={{

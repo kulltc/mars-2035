@@ -11,6 +11,7 @@ import { EventLog } from "./components/EventLog.js";
 import { CommandPanel } from "./components/CommandPanel.js";
 import { WorkerInfo } from "./components/WorkerInfo.js";
 import { WorkerPanel } from "./components/WorkerPanel.js";
+import { TechTree } from "./components/TechTree.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -28,6 +29,7 @@ export function App() {
   const [playerName, setPlayerName] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState("");
+  const [showTechTree, setShowTechTree] = useState(false);
 
   // Connect to map via WS
   useMapSubscription();
@@ -169,19 +171,32 @@ export function App() {
         width: 280, padding: 10, overflowY: "auto",
         display: "flex", flexDirection: "column", gap: 10,
         borderRight: "1px solid #333",
+        minHeight: 0,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ fontSize: 18, margin: 0 }}>Mars 2035</h2>
-          <button
-            onClick={logout}
-            style={{
-              background: "transparent", color: "#888",
-              border: "1px solid #555", padding: "2px 8px",
-              borderRadius: 4, cursor: "pointer", fontSize: 11,
-            }}
-          >
-            Logout
-          </button>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              onClick={() => setShowTechTree(true)}
+              style={{
+                background: "transparent", color: "#4fc3f7",
+                border: "1px solid #4fc3f7", padding: "2px 8px",
+                borderRadius: 4, cursor: "pointer", fontSize: 11,
+              }}
+            >
+              Tech Tree
+            </button>
+            <button
+              onClick={logout}
+              style={{
+                background: "transparent", color: "#888",
+                border: "1px solid #555", padding: "2px 8px",
+                borderRadius: 4, cursor: "pointer", fontSize: 11,
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
         <div style={{ fontSize: 11, color: "#888" }}>
           Tick: {world.tick} | Map: 0:0:0:0
@@ -202,12 +217,14 @@ export function App() {
         width: 300, padding: 10, overflowY: "auto",
         display: "flex", flexDirection: "column", gap: 10,
         borderLeft: "1px solid #333",
+        height: "100vh", boxSizing: "border-box",
       }}>
         <TileInfo />
         <WorkerInfo />
         <BuildingPanel />
         <EventLog />
       </div>
+      {showTechTree && <TechTree onClose={() => setShowTechTree(false)} />}
     </div>
   );
 }
