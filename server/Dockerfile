@@ -15,4 +15,4 @@ RUN npx tsc --build shared/tsconfig.json
 
 EXPOSE 3000
 
-CMD ["node", "--import", "tsx", "server/src/index.ts"]
+CMD ["node", "--max-old-space-size=1024", "--import", "tsx", "server/src/index.ts"]
