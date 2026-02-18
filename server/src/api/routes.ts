@@ -6,6 +6,7 @@ import {
   toMapKey,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
+import { filterStateForPlayer } from "./filterState.js";
 
 const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "place_building",
@@ -15,6 +16,9 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "configure_route",
   "delete_route",
   "buy_worker",
+  "sell_building",
+  "remove_worker",
+  "configure_worker",
 ]);
 
 let commandCounter = 0;
@@ -25,14 +29,24 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
     return store.getMeta();
   });
 
-  // GET /api/map/:dx/:dy/:mx/:my
+  // GET /api/map/:dx/:dy/:mx/:my (authenticated)
   app.get<{ Params: { dx: string; dy: string; mx: string; my: string } }>(
     "/api/map/:dx/:dy/:mx/:my",
-    async (req) => {
+    async (req, reply) => {
+      try {
+        await req.jwtVerify();
+      } catch {
+        reply.code(401);
+        return { error: "Unauthorized" };
+      }
+
+      const { playerId } = req.user as { userId: string; playerId: string };
       const { dx, dy, mx, my } = req.params;
       const mapKey = toMapKey(Number(dx), Number(dy), Number(mx), Number(my));
       const tiles = store.serializeTiles(mapKey);
-      const buildings = store.getBuildingsByMap(mapKey);
+      const { buildings } = filterStateForPlayer(
+        playerId, store.getBuildingsByMap(mapKey), []
+      );
       return { map_key: mapKey, tiles, buildings };
     }
   );

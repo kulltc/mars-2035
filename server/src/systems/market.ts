@@ -1,5 +1,5 @@
 import {
-  RESOURCE_TYPES,
+  TRADEABLE_TYPES,
   BASE_MARKET_PRICES,
   MARKET_VOLATILITY,
   MARKET_PRICE_MIN,
@@ -10,7 +10,7 @@ import {
 import type { WorldStore } from "../store/WorldStore.js";
 
 export function updateMarketPrices(store: WorldStore) {
-  for (const res of RESOURCE_TYPES) {
+  for (const res of TRADEABLE_TYPES) {
     const current = store.marketPrices[res];
     const base = BASE_MARKET_PRICES[res];
 

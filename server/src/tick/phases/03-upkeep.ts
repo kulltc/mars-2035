@@ -1,4 +1,4 @@
-import { type MapKey, WORKER_UPKEEP, SUSPENSION_DESTROY_TICKS } from "@mars-2035/shared";
+import { type MapKey, WORKER_UPKEEP, SUSPENSION_DESTROY_TICKS, BUILDING_DEFS } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 import { tileKey } from "@mars-2035/shared";
 
@@ -54,18 +54,19 @@ export function processUpkeep(store: WorldStore) {
   const byPlayerMap = new Map<string, { playerId: string; mapKey: MapKey; buildingUpkeep: number }>();
 
   for (const building of store.buildings.values()) {
-    if (building.upkeep_per_tick <= 0) continue;
+    const upkeep = BUILDING_DEFS[building.class].upkeep_per_tick;
+    if (upkeep <= 0) continue;
     if (building.status === "suspended" || building.status === "constructing") continue;
 
     const key = `${building.owner_id}:${building.map_key}`;
     const entry = byPlayerMap.get(key);
     if (entry) {
-      entry.buildingUpkeep += building.upkeep_per_tick;
+      entry.buildingUpkeep += upkeep;
     } else {
       byPlayerMap.set(key, {
         playerId: building.owner_id,
         mapKey: building.map_key,
-        buildingUpkeep: building.upkeep_per_tick,
+        buildingUpkeep: upkeep,
       });
     }
   }
@@ -142,7 +143,7 @@ export function processUpkeep(store: WorldStore) {
           building.owner_id === playerId &&
           building.map_key === mapKey &&
           building.status === "active" &&
-          building.upkeep_per_tick > 0
+          BUILDING_DEFS[building.class].upkeep_per_tick > 0
         ) {
           building.status = "suspended";
           building.suspended_at_tick = store.tick;
@@ -194,13 +195,14 @@ export function processUpkeep(store: WorldStore) {
     ).length;
     const workerUpkeep = activeWorkerCount * WORKER_UPKEEP;
 
-    const projectedTotal = currentBuildingUpkeep + workerUpkeep + building.upkeep_per_tick;
+    const buildingUpkeepCost = BUILDING_DEFS[building.class].upkeep_per_tick;
+    const projectedTotal = currentBuildingUpkeep + workerUpkeep + buildingUpkeepCost;
     const money = adminOutpost.inventory.money ?? 0;
 
     if (money >= projectedTotal) {
       building.status = "active";
       delete building.suspended_at_tick;
-      if (entry) entry.buildingUpkeep += building.upkeep_per_tick;
+      if (entry) entry.buildingUpkeep += buildingUpkeepCost;
       store.pushEvent(
         "building_resumed",
         { building_id: building.entity_id },
