@@ -51,7 +51,7 @@ async function main() {
     console.log(`Restored from tick ${snapshot.tick} (${store.players.size} players, ${store.buildings.size} buildings)`);
   } else {
     store = new WorldStore(42);
-    console.log("World seeded with 4 districts, 100 maps");
+    console.log("World seeded with 1 district, 10 maps");
   }
 
   // Register routes

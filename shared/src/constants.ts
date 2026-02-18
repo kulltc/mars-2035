@@ -2,10 +2,10 @@ import type { Assets, BuildingClass, MaterialType, ResourceType } from "./types.
 
 // ── World dimensions ──
 
-export const DISTRICTS_X = 2;
-export const DISTRICTS_Y = 2;
+export const DISTRICTS_X = 1;
+export const DISTRICTS_Y = 1;
 export const MAPS_PER_DISTRICT_X = 5;
-export const MAPS_PER_DISTRICT_Y = 5;
+export const MAPS_PER_DISTRICT_Y = 2;
 export const TILES_PER_MAP = 300;
 
 // ── Tick ──
