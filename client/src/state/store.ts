@@ -1,7 +1,43 @@
 import { create } from "zustand";
 import type {
   Player, Building, Tile, GameEvent, WorldMeta, MarketPrices, Worker, WorkerFilter,
+  BuildingClass,
 } from "@mars-2035/shared";
+
+// ── Notification types ──
+
+export type NotificationType = "success" | "error" | "warning" | "info";
+
+export interface Notification {
+  id: string;
+  text: string;
+  type: NotificationType;
+  createdAt: number;
+  duration: number; // ms, 0 = manual dismiss
+}
+
+// ── Optimistic building ──
+
+export interface PendingBuilding {
+  id: string;
+  buildingClass: BuildingClass;
+  x: number;
+  y: number;
+  placedAt: number;
+}
+
+// ── Route picker ──
+
+export interface RoutePickerTarget {
+  fromBuildingId: string;
+  toBuildingId: string;
+  screenX: number;
+  screenY: number;
+}
+
+// ── Store ──
+
+let notifCounter = 0;
 
 export interface GameState {
   // Auth
@@ -48,22 +84,45 @@ export interface GameState {
   marketPrices: MarketPrices | null;
   setMarketPrices: (prices: MarketPrices) => void;
 
-  // Event log
+  // Event log (kept for subscription, not displayed)
   events: GameEvent[];
   addEvents: (events: GameEvent[]) => void;
 
-  // UI
-  buildMode: string | null; // building class being placed
+  // Build mode
+  buildMode: string | null;
   setBuildMode: (mode: string | null) => void;
-  areaDrawMode: string | null; // worker entity_id being configured, or null
+
+  // Worker area draw
+  areaDrawMode: string | null;
   setAreaDrawMode: (id: string | null) => void;
-  // Optimistic worker filter — tracks local edits before server confirms
+
+  // Optimistic worker filter
   pendingWorkerFilter: { workerId: string; filter: WorkerFilter | undefined } | null;
   setPendingWorkerFilter: (workerId: string, filter: WorkerFilter | undefined) => void;
   clearPendingWorkerFilter: () => void;
+
+  // ── New: Notifications ──
+  notifications: Notification[];
+  addNotification: (text: string, type: NotificationType, duration?: number) => void;
+  dismissNotification: (id: string) => void;
+
+  // ── New: Optimistic buildings ──
+  pendingBuildings: PendingBuilding[];
+  addPendingBuilding: (pb: Omit<PendingBuilding, "id" | "placedAt">) => void;
+
+  // ── New: Route picker ──
+  routePickerTarget: RoutePickerTarget | null;
+  setRoutePickerTarget: (target: RoutePickerTarget | null) => void;
+
+  // ── New: UI toggles ──
+  showMarket: boolean;
+  toggleMarket: () => void;
+  showTechTree: boolean;
+  toggleTechTree: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
+  // ── Auth ──
   token: localStorage.getItem("mars_token"),
   setToken: (token) => {
     localStorage.setItem("mars_token", token);
@@ -74,15 +133,19 @@ export const useGameStore = create<GameState>((set) => ({
     set({ token: null, player: null });
   },
 
+  // ── World ──
   world: null,
   setWorld: (world) => set({ world }),
 
+  // ── Player ──
   player: null,
   setPlayer: (player) => set({ player }),
 
+  // ── Map ──
   currentMap: null,
   setCurrentMap: (currentMap) => set({ currentMap }),
 
+  // ── Tiles ──
   tiles: new Map(),
   setTiles: (tiles) => {
     const map = new Map<string, Tile>();
@@ -92,8 +155,17 @@ export const useGameStore = create<GameState>((set) => ({
     set({ tiles: map });
   },
 
+  // ── Buildings ──
   buildings: [],
-  setBuildings: (buildings) => set({ buildings }),
+  setBuildings: (buildings) =>
+    set((state) => {
+      // Clear pending buildings that server now has
+      const buildingPositions = new Set(buildings.map((b) => `${b.location.x}:${b.location.y}`));
+      const pendingBuildings = state.pendingBuildings.filter(
+        (pb) => !buildingPositions.has(`${pb.x}:${pb.y}`)
+      );
+      return { buildings, pendingBuildings };
+    }),
   updateBuilding: (building) =>
     set((state) => ({
       buildings: state.buildings.map((b) =>
@@ -101,6 +173,7 @@ export const useGameStore = create<GameState>((set) => ({
       ),
     })),
 
+  // ── Workers ──
   workers: [],
   setWorkers: (workers) =>
     set((state) => {
@@ -113,27 +186,68 @@ export const useGameStore = create<GameState>((set) => ({
   workerPrevPositions: new Map(),
   workerUpdateAt: 0,
 
+  // ── Selection ──
   selectedWorkerId: null,
   setSelectedWorkerId: (selectedWorkerId) => set({ selectedWorkerId }),
-
   selectedTile: null,
   setSelectedTile: (selectedTile) => set({ selectedTile }),
 
+  // ── Market ──
   marketPrices: null,
   setMarketPrices: (marketPrices) => set({ marketPrices }),
 
+  // ── Events ──
   events: [],
   addEvents: (newEvents) =>
     set((state) => ({
       events: [...state.events, ...newEvents].slice(-200),
     })),
 
+  // ── Build mode ──
   buildMode: null,
   setBuildMode: (buildMode) => set({ buildMode }),
+
+  // ── Area draw ──
   areaDrawMode: null,
   setAreaDrawMode: (areaDrawMode) => set({ areaDrawMode }),
+
+  // ── Optimistic worker filter ──
   pendingWorkerFilter: null,
   setPendingWorkerFilter: (workerId, filter) =>
     set({ pendingWorkerFilter: { workerId, filter } }),
   clearPendingWorkerFilter: () => set({ pendingWorkerFilter: null }),
+
+  // ── Notifications ──
+  notifications: [],
+  addNotification: (text, type, duration = 4000) =>
+    set((state) => ({
+      notifications: [
+        ...state.notifications,
+        { id: `n-${++notifCounter}`, text, type, createdAt: Date.now(), duration },
+      ].slice(-10),
+    })),
+  dismissNotification: (id) =>
+    set((state) => ({
+      notifications: state.notifications.filter((n) => n.id !== id),
+    })),
+
+  // ── Pending buildings ──
+  pendingBuildings: [],
+  addPendingBuilding: (pb) =>
+    set((state) => ({
+      pendingBuildings: [
+        ...state.pendingBuildings,
+        { ...pb, id: `pb-${Date.now()}`, placedAt: Date.now() },
+      ],
+    })),
+
+  // ── Route picker ──
+  routePickerTarget: null,
+  setRoutePickerTarget: (routePickerTarget) => set({ routePickerTarget }),
+
+  // ── UI toggles ──
+  showMarket: false,
+  toggleMarket: () => set((state) => ({ showMarket: !state.showMarket })),
+  showTechTree: false,
+  toggleTechTree: () => set((state) => ({ showTechTree: !state.showTechTree })),
 }));

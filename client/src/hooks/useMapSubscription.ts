@@ -24,6 +24,31 @@ interface EventsMessage {
 
 type WSMessage = SnapshotMessage | EventsMessage;
 
+/** Event types that generate user-visible notifications */
+function notifyForEvents(events: GameEvent[]) {
+  const addNotification = useGameStore.getState().addNotification;
+  for (const evt of events) {
+    switch (evt.type) {
+      case "command_failed":
+        addNotification(`${evt.data.command_type}: ${evt.data.error}`, "error");
+        break;
+      case "building_suspended":
+        addNotification(
+          `Building suspended: ${evt.data.reason}`,
+          "warning"
+        );
+        break;
+      case "building_destroyed":
+        addNotification("A building was destroyed!", "error");
+        break;
+      case "construction_complete":
+        addNotification("Construction complete!", "success");
+        break;
+      // Suppress routine events: production, routes, market updates, ticks, etc.
+    }
+  }
+}
+
 export function useMapSubscription() {
   const wsRef = useRef<WebSocket | null>(null);
   const currentMap = useGameStore((s) => s.currentMap);
@@ -32,6 +57,7 @@ export function useMapSubscription() {
   const setWorkers = useGameStore((s) => s.setWorkers);
   const addEvents = useGameStore((s) => s.addEvents);
   const setMarketPrices = useGameStore((s) => s.setMarketPrices);
+  const setWorld = useGameStore((s) => s.setWorld);
 
   useEffect(() => {
     if (!currentMap) return;
@@ -45,11 +71,24 @@ export function useMapSubscription() {
         setBuildings(msg.buildings);
         if (msg.workers) setWorkers(msg.workers);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
+        // Update tick from snapshot
+        if (msg.tick) {
+          const world = useGameStore.getState().world;
+          if (world) setWorld({ ...world, tick: msg.tick });
+        }
       } else if (msg.type === "events") {
         addEvents(msg.events);
         setBuildings(msg.buildings);
         if (msg.workers) setWorkers(msg.workers);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
+        // Generate notifications for important events
+        notifyForEvents(msg.events);
+        // Update tick from events
+        const tickEvt = msg.events.find((e) => e.type === "tick_complete");
+        if (tickEvt) {
+          const world = useGameStore.getState().world;
+          if (world) setWorld({ ...world, tick: tickEvt.tick });
+        }
       }
     });
 
@@ -59,5 +98,5 @@ export function useMapSubscription() {
       ws.close();
       wsRef.current = null;
     };
-  }, [currentMap, setTiles, setBuildings, setWorkers, addEvents, setMarketPrices]);
+  }, [currentMap, setTiles, setBuildings, setWorkers, addEvents, setMarketPrices, setWorld]);
 }
