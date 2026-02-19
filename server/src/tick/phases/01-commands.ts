@@ -13,7 +13,7 @@ import type {
   ResourceType,
   WorkerFilter,
 } from "@mars-2035/shared";
-import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey } from "@mars-2035/shared";
+import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey, RESEARCH_TREE } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 import { placeBuilding, spawnWorker } from "../../systems/building.js";
 
@@ -454,6 +454,68 @@ function handleConfigureWorker(store: WorldStore, player: Player, data: Record<s
   };
 }
 
+function handleDoResearch(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { research_id } = data as { research_id: string };
+
+  const def = RESEARCH_TREE[research_id];
+  if (!def) return { ok: false, error: "Unknown research" };
+
+  if (player.research.includes(research_id)) {
+    return { ok: false, error: "Already researched" };
+  }
+
+  // Check prerequisites
+  for (const req of def.requires) {
+    if (!player.research.includes(req)) {
+      return { ok: false, error: `Prerequisite not met: ${RESEARCH_TREE[req]?.name ?? req}` };
+    }
+  }
+
+  // Find a research_lab owned by this player (any map)
+  let labMapKey: string | null = null;
+  for (const b of store.buildings.values()) {
+    if (b.class === "research_lab" && b.owner_id === player.entity_id && b.status === "active") {
+      labMapKey = b.map_key;
+      break;
+    }
+  }
+  if (!labMapKey) return { ok: false, error: "No active Research Lab" };
+
+  // Find admin outpost on the lab's map to deduct materials
+  const account = player.map_accounts[labMapKey];
+  if (!account?.admin_outpost_building_id) return { ok: false, error: "No admin outpost on lab's map" };
+  const admin = store.buildings.get(account.admin_outpost_building_id);
+  if (!admin) return { ok: false, error: "Admin outpost not found" };
+
+  // Check and deduct costs
+  for (const [mat, cost] of Object.entries(def.cost)) {
+    if (!cost) continue;
+    const available = admin.inventory[mat as MaterialType] ?? 0;
+    if (available < cost) {
+      return { ok: false, error: `Insufficient ${mat.replace(/_/g, " ")} (need ${cost}, have ${available.toFixed(1)})` };
+    }
+  }
+  for (const [mat, cost] of Object.entries(def.cost)) {
+    if (!cost) continue;
+    admin.inventory[mat as MaterialType] = (admin.inventory[mat as MaterialType] ?? 0) - cost;
+  }
+
+  player.research.push(research_id);
+
+  return {
+    ok: true,
+    events: [{
+      type: "research_complete",
+      data: {
+        research_id,
+        player_id: player.entity_id,
+        name: def.name,
+      },
+      mapKey: labMapKey,
+    }],
+  };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -467,6 +529,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   sell_building: handleSellBuilding,
   remove_worker: handleRemoveWorker,
   configure_worker: handleConfigureWorker,
+  do_research: handleDoResearch,
 };
 
 // ── Main processor ──

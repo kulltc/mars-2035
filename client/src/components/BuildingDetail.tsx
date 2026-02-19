@@ -5,11 +5,12 @@ import {
   MATERIAL_TYPES, TRADEABLE_TYPES, BUILDING_DEFS, SUSPENSION_DESTROY_TICKS,
   totalInventory, outputBufferTotal,
   type MaterialType, type ResourceType, type AutoSellRule, type Building,
+  RESEARCH_TREE, type ResearchDef,
 } from "@mars-2035/shared";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
 
 const BUILDING_COLORS: Record<string, string> = {
-  admin_outpost: "#4fc3f7", mine: "#ffb74d", port: "#81c784",
+  admin_outpost: "#4fc3f7", research_lab: "#7e57c2", mine: "#ffb74d", port: "#81c784",
   smelter: "#e65100", magnetic_press: "#d84315", morphic_forge: "#bf360c",
   servo_assembly: "#a52714", replication_chamber: "#8b1a1a",
   polymer_kiln: "#7b1fa2", crystal_grower: "#6a1b9a", toroidin_foundry: "#4a148c",
@@ -21,7 +22,7 @@ const BUILDING_COLORS: Record<string, string> = {
 };
 
 const BUILDING_ICONS: Record<string, string> = {
-  admin_outpost: "\u2302", mine: "\u26CF", port: "\u2693",
+  admin_outpost: "\u2302", research_lab: "\u2697", mine: "\u26CF", port: "\u2693",
   smelter: "S", magnetic_press: "M", morphic_forge: "F",
   servo_assembly: "V", replication_chamber: "R",
   polymer_kiln: "K", crystal_grower: "G", toroidin_foundry: "T",
@@ -316,6 +317,70 @@ export function BuildingDetail() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Research panel (research_lab only) */}
+      {building.class === "research_lab" && player && (
+        <div className="bd-section">
+          <div className="bd-section-title">Research</div>
+          {(["diplomacy", "logistics"] as const).map((track) => {
+            const items = Object.values(RESEARCH_TREE).filter((r) => r.track === track);
+            return (
+              <div key={track} className="research-track">
+                <div className="research-track-title">{track === "diplomacy" ? "\u25B8 DIPLOMACY" : "\u25B8 LOGISTICS"}</div>
+                {items.map((res, idx) => {
+                  const completed = player.research?.includes(res.id);
+                  const prereqsMet = res.requires.every((r) => player.research?.includes(r));
+                  const available = prereqsMet && !completed;
+                  const costEntries = Object.entries(res.cost).filter(([, v]) => v && v > 0);
+
+                  return (
+                    <React.Fragment key={res.id}>
+                      {idx > 0 && <div className="research-connector">{"\u2502"}</div>}
+                      <div className={`research-node ${completed ? "completed" : available ? "available" : "locked"}`}>
+                        <div className="research-node-header">
+                          <span className="research-status-icon">
+                            {completed ? "\u2713" : available ? "\u25C9" : "\uD83D\uDD12"}
+                          </span>
+                          <span className="research-name">{res.name}</span>
+                        </div>
+                        <div className="research-desc">{res.description}</div>
+                        <div className="research-cost">
+                          {costEntries.map(([mat, amt]) => (
+                            <span key={mat} className="research-cost-item">
+                              {amt} {mat.replace(/_/g, " ")}
+                            </span>
+                          ))}
+                        </div>
+                        {!prereqsMet && (
+                          <div className="research-prereq">
+                            Requires: {res.requires.map((r) => RESEARCH_TREE[r]?.name ?? r).join(", ")}
+                          </div>
+                        )}
+                        {available && (
+                          <button
+                            className="btn btn-accent btn-sm"
+                            style={{ marginTop: 4 }}
+                            onClick={async () => {
+                              const result = await submitCommand("do_research", { research_id: res.id });
+                              if (result.error) {
+                                addNotification(`Research failed: ${result.error}`, "error");
+                              } else {
+                                addNotification(`Researched: ${res.name}`, "success");
+                              }
+                            }}
+                          >
+                            Research
+                          </button>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
 

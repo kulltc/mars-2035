@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore } from "../state/store.js";
 import {
   TICK_INTERVAL_MS, TILES_PER_MAP,
-  totalInventory, BUILDING_DEFS,
+  totalInventory, BUILDING_DEFS, TERRITORY_RADIUS,
   type Building, type BuildingClass, type MaterialType,
+  getTerritoryInfo, type TerritoryBuilding,
 } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 
@@ -21,7 +22,7 @@ function lerp(a: number, b: number, t: number) {
 // ── Colors ──
 
 const RESOURCE_COLORS: Record<string, string> = {
-  steel: "#3d4a55",
+  steel: "#5c7080",
   silicon: "#3a5560",
   polymer: "#553a55",
   rare_earth: "#605530",
@@ -30,6 +31,9 @@ const RESOURCE_COLORS: Record<string, string> = {
 
 const BUILDING_COLORS: Record<string, string> = {
   admin_outpost: "#4fc3f7",
+  infra_tower: "#26c6da",
+  research_lab: "#7e57c2",
+  research_station: "#ab47bc",
   mine: "#ffb74d",
   port: "#81c784",
   smelter: "#e65100", magnetic_press: "#d84315", morphic_forge: "#bf360c",
@@ -43,7 +47,8 @@ const BUILDING_COLORS: Record<string, string> = {
 };
 
 const BUILDING_ICONS: Record<string, string> = {
-  admin_outpost: "\u2302", mine: "\u26CF", port: "\u2693",
+  admin_outpost: "\u2302", infra_tower: "\u25E3", research_lab: "\u2697", research_station: "\u2609",
+  mine: "\u26CF", port: "\u2693",
   smelter: "S", magnetic_press: "M", morphic_forge: "F",
   servo_assembly: "V", replication_chamber: "R",
   polymer_kiln: "K", crystal_grower: "G", toroidin_foundry: "T",
@@ -55,7 +60,8 @@ const BUILDING_ICONS: Record<string, string> = {
 };
 
 export const DISPLAY_NAMES: Record<string, string> = {
-  admin_outpost: "Admin Outpost", mine: "Mine", port: "Trading Outpost",
+  admin_outpost: "Admin Outpost", infra_tower: "Infra Tower", research_lab: "Research Lab", research_station: "Research Station",
+  mine: "Mine", port: "Trading Outpost",
   smelter: "Smelter", magnetic_press: "Magnetic Press", morphic_forge: "Morphic Forge",
   servo_assembly: "Servo Assembly", replication_chamber: "Replication Chamber",
   polymer_kiln: "Polymer Kiln", crystal_grower: "Crystal Grower", toroidin_foundry: "Toroidin Foundry",
@@ -231,6 +237,133 @@ export function MapCanvas() {
         }
       }
 
+      // ── Territory overlay ──
+      const playerId = state.player?.entity_id;
+      if (playerId) {
+        // Collect territory buildings on this map
+        const terBuildings: TerritoryBuilding[] = [];
+        for (const b of state.buildings) {
+          if (TERRITORY_RADIUS[b.class] != null) {
+            terBuildings.push({ x: b.location.x, y: b.location.y, class: b.class, owner_id: b.owner_id });
+          }
+        }
+
+        if (terBuildings.length > 0) {
+          for (let ty = minTY; ty <= maxTY; ty++) {
+            for (let tx = minTX; tx <= maxTX; tx++) {
+              if (tx < 0 || ty < 0 || tx >= TILES_PER_MAP || ty >= TILES_PER_MAP) continue;
+              const info = getTerritoryInfo(terBuildings, tx, ty, playerId);
+              if (!info.inTerritory) continue;
+
+              const sx = (tx - cam.x) * ts;
+              const sy = (ty - cam.y) * ts;
+              ctx.fillStyle = info.contested
+                ? "rgba(255, 183, 77, 0.10)"
+                : "rgba(79, 195, 247, 0.08)";
+              ctx.fillRect(sx, sy, ts, ts);
+
+              // Border edges: draw dashed line on sides that border non-territory
+              ctx.strokeStyle = info.contested
+                ? "rgba(255, 183, 77, 0.25)"
+                : "rgba(79, 195, 247, 0.18)";
+              ctx.lineWidth = 1;
+              ctx.setLineDash([3, 3]);
+
+              // Check adjacent tiles
+              const left = tx > 0 && getTerritoryInfo(terBuildings, tx - 1, ty, playerId).inTerritory;
+              const right = tx < TILES_PER_MAP - 1 && getTerritoryInfo(terBuildings, tx + 1, ty, playerId).inTerritory;
+              const top = ty > 0 && getTerritoryInfo(terBuildings, tx, ty - 1, playerId).inTerritory;
+              const bottom = ty < TILES_PER_MAP - 1 && getTerritoryInfo(terBuildings, tx, ty + 1, playerId).inTerritory;
+
+              if (!left) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + ts); ctx.stroke(); }
+              if (!right) { ctx.beginPath(); ctx.moveTo(sx + ts, sy); ctx.lineTo(sx + ts, sy + ts); ctx.stroke(); }
+              if (!top) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + ts, sy); ctx.stroke(); }
+              if (!bottom) { ctx.beginPath(); ctx.moveTo(sx, sy + ts); ctx.lineTo(sx + ts, sy + ts); ctx.stroke(); }
+
+              ctx.setLineDash([]);
+            }
+          }
+        }
+      }
+
+      // ── Build-mode cursor validation & territory preview ──
+      if (state.buildMode && playerId) {
+        const bClass = state.buildMode as BuildingClass;
+        const mouseScreen = mousePosRef.current;
+        const mWorld = { x: mouseScreen.x / ts + cam.x, y: mouseScreen.y / ts + cam.y };
+        const hoverTX = Math.floor(mWorld.x);
+        const hoverTY = Math.floor(mWorld.y);
+
+        if (hoverTX >= 0 && hoverTY >= 0 && hoverTX < TILES_PER_MAP && hoverTY < TILES_PER_MAP) {
+          // Collect territory buildings (reuse from overlay if available)
+          const bTerBuildings: TerritoryBuilding[] = [];
+          for (const b of state.buildings) {
+            if (TERRITORY_RADIUS[b.class] != null) {
+              bTerBuildings.push({ x: b.location.x, y: b.location.y, class: b.class, owner_id: b.owner_id });
+            }
+          }
+
+          // Determine if placement is valid
+          let canPlace = true;
+          const hoverTile = state.tiles.get(`${hoverTX}:${hoverTY}`);
+
+          // Tile already occupied
+          if (hoverTile?.building_id || buildingByTile.has(`${hoverTX}:${hoverTY}`)) {
+            canPlace = false;
+          }
+
+          // Mine must be on resource tile
+          if (bClass === "mine" && !hoverTile?.resource) {
+            canPlace = false;
+          }
+
+          // Territory checks (skip for admin_outpost and research_station)
+          if (bClass !== "admin_outpost" && bClass !== "research_station" && bTerBuildings.length > 0) {
+            const info = getTerritoryInfo(bTerBuildings, hoverTX, hoverTY, playerId);
+            if (!info.inTerritory) {
+              canPlace = false;
+            }
+            // Territory buildings need full territory and no contest
+            if (TERRITORY_RADIUS[bClass] != null) {
+              if (!info.fullTerritory || info.contested) {
+                canPlace = false;
+              }
+            }
+          }
+
+          // Draw cursor tile tint
+          const csx = (hoverTX - cam.x) * ts;
+          const csy = (hoverTY - cam.y) * ts;
+          ctx.fillStyle = canPlace
+            ? "rgba(79, 195, 247, 0.2)"
+            : "rgba(244, 67, 54, 0.25)";
+          ctx.fillRect(csx, csy, ts, ts);
+          ctx.strokeStyle = canPlace ? "#4fc3f7" : "#f44336";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(csx + 1, csy + 1, ts - 2, ts - 2);
+
+          // Territory influence diamond preview for territory buildings
+          const radius = TERRITORY_RADIUS[bClass];
+          if (radius != null) {
+            ctx.fillStyle = canPlace
+              ? "rgba(79, 195, 247, 0.12)"
+              : "rgba(244, 67, 54, 0.08)";
+            for (let dy = -radius; dy <= radius; dy++) {
+              const maxDx = radius - Math.abs(dy);
+              for (let dx = -maxDx; dx <= maxDx; dx++) {
+                if (dx === 0 && dy === 0) continue; // already drew center
+                const px = hoverTX + dx;
+                const py = hoverTY + dy;
+                if (px < 0 || py < 0 || px >= TILES_PER_MAP || py >= TILES_PER_MAP) continue;
+                const psx = (px - cam.x) * ts;
+                const psy = (py - cam.y) * ts;
+                ctx.fillRect(psx, psy, ts, ts);
+              }
+            }
+          }
+        }
+      }
+
       // ── Draw route arrows (all buildings) ──
       const selectedBuildingId = state.selectedTile
         ? buildingByTile.get(`${state.selectedTile.x}:${state.selectedTile.y}`)?.entity_id
@@ -263,7 +396,6 @@ export function MapCanvas() {
       }
 
       // ── Draw buildings ──
-      const playerId = state.player?.entity_id;
       for (let ty = minTY; ty <= maxTY; ty++) {
         for (let tx = minTX; tx <= maxTX; tx++) {
           const b = buildingByTile.get(`${tx}:${ty}`);

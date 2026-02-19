@@ -179,6 +179,10 @@ export class WorldStore {
     store.seq = payload.seq;
 
     store.players = new Map(Object.entries(payload.players));
+    // Migration: backfill research array for existing players
+    for (const player of store.players.values()) {
+      if (!player.research) player.research = [];
+    }
     store.buildings = new Map(Object.entries(payload.buildings));
 
     if (payload.marketPrices) {

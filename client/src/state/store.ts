@@ -121,6 +121,8 @@ export interface GameState {
   toggleTechTree: () => void;
   showWorkers: boolean;
   toggleWorkers: () => void;
+  showMapSelector: boolean;
+  toggleMapSelector: () => void;
 
   // ── Camera target (for locate-worker) ──
   cameraTarget: { x: number; y: number } | null;
@@ -165,10 +167,11 @@ export const useGameStore = create<GameState>((set) => ({
   buildings: [],
   setBuildings: (buildings) =>
     set((state) => {
-      // Clear pending buildings that server now has
+      // Clear pending buildings that server now has or that have expired (10s timeout)
       const buildingPositions = new Set(buildings.map((b) => `${b.location.x}:${b.location.y}`));
+      const now = Date.now();
       const pendingBuildings = state.pendingBuildings.filter(
-        (pb) => !buildingPositions.has(`${pb.x}:${pb.y}`)
+        (pb) => !buildingPositions.has(`${pb.x}:${pb.y}`) && now - pb.placedAt < 10_000
       );
       return { buildings, pendingBuildings };
     }),
@@ -258,6 +261,8 @@ export const useGameStore = create<GameState>((set) => ({
   toggleTechTree: () => set((state) => ({ showTechTree: !state.showTechTree })),
   showWorkers: false,
   toggleWorkers: () => set((state) => ({ showWorkers: !state.showWorkers })),
+  showMapSelector: false,
+  toggleMapSelector: () => set((state) => ({ showMapSelector: !state.showMapSelector })),
 
   // ── Camera target ──
   cameraTarget: null,

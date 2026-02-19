@@ -2,11 +2,22 @@ import React from "react";
 import { useGameStore } from "../state/store.js";
 import {
   totalInventory, WORKER_CAPACITY, WORKER_MONEY_CAPACITY,
-  MATERIAL_TYPES, type MaterialType, type WorkerState, type WorkerFilter, type WorkerTaskType,
+  BUILDING_DEFS, MATERIAL_TYPES,
+  type MaterialType, type WorkerState, type WorkerFilter, type WorkerTaskType,
 } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 
-const RESOURCE_LIST: MaterialType[] = [...MATERIAL_TYPES].filter((m) => m !== "money");
+const ALL_MATERIALS: MaterialType[] = [...MATERIAL_TYPES];
+
+/** Material groups for structured layout */
+const MATERIAL_GROUPS: { label: string; color: string; items: MaterialType[] }[] = [
+  { label: "General", color: "var(--money)", items: ["money"] },
+  { label: "Raw", color: "var(--text-secondary)", items: ["steel", "silicon", "polymer", "rare_earth", "carbon"] },
+  { label: "Morphic", color: "#ff7043", items: ["ferrite_alloy", "morphic_composite", "morphic_core", "servo_cortex", "autonomic_matrix"] },
+  { label: "Toroidin", color: "#ba68c8", items: ["thermoplast", "lattice_fiber", "toroidin_plate", "muphrid_cell", "paradox_weave"] },
+  { label: "Cryogenic", color: "#4dd0e1", items: ["cryite", "null_phase_gel", "xenotherm_crystal", "absolute_lattice", "zero_point_shard"] },
+  { label: "Psycho", color: "#f48fb1", items: ["psi_crystal", "esper_thread", "psychon_core", "peep_shield", "noetic_matrix"] },
+];
 
 const STATE_LABELS: Record<WorkerState, string> = {
   idle: "Idle",
@@ -69,15 +80,43 @@ export function WorkerDetail() {
   };
 
   const toggleResource = (res: MaterialType, checked: boolean) => {
-    const current = filter?.resources ?? [...RESOURCE_LIST];
+    const current = filter?.resources ?? [...ALL_MATERIALS];
     let next: MaterialType[];
     if (checked) {
       next = current.includes(res) ? current : [...current, res];
     } else {
       next = current.filter((r) => r !== res);
     }
-    applyFilter({ ...filter, resources: next.length >= RESOURCE_LIST.length ? undefined : next });
+    applyFilter({ ...filter, resources: next.length >= ALL_MATERIALS.length ? undefined : next });
   };
+
+  // Determine which materials are relevant on this map
+  const buildings = useGameStore.getState().buildings;
+  const relevantMaterials = new Set<MaterialType>(["money"]);
+  // Raw resources from mines
+  for (const b of buildings) {
+    if (b.resource_type) relevantMaterials.add(b.resource_type);
+    // Outputs from recipe buildings
+    const def = BUILDING_DEFS[b.class];
+    if (def.recipe) {
+      relevantMaterials.add(def.recipe.output);
+      for (const mat of Object.keys(def.recipe.inputs)) {
+        relevantMaterials.add(mat as MaterialType);
+      }
+    }
+    // Anything in building inventories
+    for (const [mat, amt] of Object.entries(b.inventory)) {
+      if (amt && amt > 0) relevantMaterials.add(mat as MaterialType);
+    }
+    if (b.output_buffer) {
+      for (const [mat, amt] of Object.entries(b.output_buffer)) {
+        if (amt && amt > 0) relevantMaterials.add(mat as MaterialType);
+      }
+    }
+  }
+
+  const allChecked = !filter?.resources;
+  const noneChecked = filter?.resources?.length === 0;
 
   return (
     <div className="worker-detail" style={{ bottom: 8, right: 8 }}>
@@ -156,18 +195,34 @@ export function WorkerDetail() {
           </label>
         </div>
 
-        {/* Resource filters (collapsible) */}
+        {/* Resource filters */}
         {hasPickup && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0 10px", marginBottom: 4 }}>
-            {RESOURCE_LIST.slice(0, 6).map((res) => {
-              const checked = !filter?.resources || filter.resources.includes(res);
-              return (
-                <label key={res} className="filter-check">
-                  <input type="checkbox" checked={checked} onChange={(e) => toggleResource(res, e.target.checked)} />
-                  {res.replace(/_/g, " ")}
-                </label>
-              );
-            })}
+          <div className="resource-filter-section">
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600 }}>Materials</span>
+              <button className="btn btn-sm" onClick={() => applyFilter({ ...filter, resources: undefined })}>All</button>
+              <button className="btn btn-sm" onClick={() => applyFilter({ ...filter, resources: [] })}>None</button>
+            </div>
+            <div className="resource-filter-groups">
+              {MATERIAL_GROUPS.map((group) => {
+                const visibleItems = group.items.filter((m) => relevantMaterials.has(m));
+                if (visibleItems.length === 0) return null;
+                return (
+                  <div key={group.label} className="resource-filter-group">
+                    <div className="resource-filter-group-label" style={{ color: group.color }}>{group.label}</div>
+                    {visibleItems.map((res) => {
+                      const checked = !filter?.resources || filter.resources.includes(res);
+                      return (
+                        <label key={res} className="filter-check">
+                          <input type="checkbox" checked={checked} onChange={(e) => toggleResource(res, e.target.checked)} />
+                          {res === "money" ? "$" : res.replace(/_/g, " ")}
+                        </label>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

@@ -74,6 +74,9 @@ export interface Tile {
 
 export const BUILDING_CLASSES = [
   "admin_outpost",
+  "infra_tower",
+  "research_station",
+  "research_lab",
   "mine",
   "port",
   // Morphic Chain
@@ -211,6 +214,7 @@ export interface Player {
   name: string;
   status: PlayerStatus;
   map_accounts: Record<MapKey, MapAccount>;
+  research: string[];
 }
 
 // ── Events ──
@@ -234,7 +238,8 @@ export type EventType =
   | "worker_dropoff"
   | "construction_complete"
   | "building_destroyed"
-  | "processing";
+  | "processing"
+  | "research_complete";
 
 export interface GameEvent {
   world_id: string;
@@ -258,7 +263,8 @@ export type CommandType =
   | "buy_worker"
   | "sell_building"
   | "remove_worker"
-  | "configure_worker";
+  | "configure_worker"
+  | "do_research";
 
 export interface Command {
   id: string;

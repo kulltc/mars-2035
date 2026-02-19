@@ -1,5 +1,17 @@
 import type { Assets, BuildingClass, MaterialType, ResourceType } from "./types.js";
 
+// ── Territory ──
+
+export const TERRITORY_RADIUS: Partial<Record<BuildingClass, number>> = {
+  admin_outpost: 15,
+  infra_tower: 8,
+  research_station: 3,
+};
+
+export const TIER3_RESOURCES: ResourceType[] = [
+  "morphic_core", "toroidin_plate", "xenotherm_crystal", "psychon_core",
+];
+
 // ── World dimensions ──
 
 export const DISTRICTS_X = 1;
@@ -32,6 +44,9 @@ export interface BuildingDef {
 
 export const BUILDING_DEFS: Record<BuildingClass, BuildingDef> = {
   admin_outpost: { upkeep_per_tick: 0, cost: {}, capacity: 2000, build_ticks: 0 },
+  infra_tower: { upkeep_per_tick: 1.0, cost: { money: 500, steel: 50 }, capacity: 100, build_ticks: 10 },
+  research_lab: { upkeep_per_tick: 0.5, cost: { money: 300 }, capacity: 100, build_ticks: 8 },
+  research_station: { upkeep_per_tick: 1.5, cost: { money: 1000 }, capacity: 50, build_ticks: 15 },
   mine: { upkeep_per_tick: 0.2, cost: { money: 100 }, capacity: 50, production_per_tick: 5, build_ticks: 3 },
   port: { upkeep_per_tick: 0.3, cost: { money: 150 }, capacity: 200, build_ticks: 5 },
   // Morphic Chain

@@ -8,9 +8,14 @@ import {
   RESOURCE_TYPES,
   STARTING_MONEY,
   STARTING_WORKERS,
+  TERRITORY_RADIUS,
   WORKER_CAPACITY,
   locationToMapKey,
   tileKey,
+  getTerritoryInfo,
+  type TerritoryBuilding,
+  getResearchForBuilding,
+  RESEARCH_TREE,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 
@@ -22,13 +27,21 @@ export function setBuildingCounter(n: number) {
 
 export function spawnWorker(store: WorldStore, ownerId: string, mapKey: string, x: number, y: number) {
   const wid = `wrk_${++store.workerCounter}`;
+  // Apply worker capacity research bonus
+  const player = store.players.get(ownerId);
+  let workerCap = WORKER_CAPACITY;
+  if (player?.research.includes("storage_workers")) {
+    const effect = RESEARCH_TREE.storage_workers.effect!;
+    workerCap = Math.round(workerCap * effect.multiplier);
+  }
+
   const worker: import("@mars-2035/shared").Worker = {
     entity_id: wid,
     owner_id: ownerId,
     map_key: mapKey,
     x, y,
     inventory: {},
-    capacity: WORKER_CAPACITY,
+    capacity: workerCap,
     state: "idle",
     worker_status: "active",
   };
@@ -58,11 +71,56 @@ export function placeBuilding(
     }
   }
 
-  // Mine / Port: require admin outpost on this map
+  // Admin outpost on non-home maps requires unlock_new_map research
+  if (buildingClass === "admin_outpost") {
+    const hasAnyOutpost = Object.values(player.map_accounts).some(a => a.admin_outpost_building_id);
+    if (hasAnyOutpost && !player.research.includes("unlock_new_map")) {
+      return { ok: false, error: "Research 'Colonial Expansion' required to expand to new maps" };
+    }
+  }
+
+  // Non-admin buildings: require admin outpost on this map
   if (buildingClass !== "admin_outpost") {
     const account = player.map_accounts[mapKey];
     if (!account?.admin_outpost_building_id) {
       return { ok: false, error: "Must have an admin outpost on this map first" };
+    }
+
+    // Research gating for buildings
+    const requiredResearch = getResearchForBuilding(buildingClass);
+    if (requiredResearch && !player.research.includes(requiredResearch)) {
+      const researchName = RESEARCH_TREE[requiredResearch]?.name ?? requiredResearch;
+      return { ok: false, error: `Research '${researchName}' required to build ${buildingClass.replace(/_/g, " ")}` };
+    }
+
+    // Territory validation (skip for admin_outpost and research_station)
+    if (buildingClass !== "research_station") {
+      const territoryBuildings: TerritoryBuilding[] = [];
+      for (const b of store.buildings.values()) {
+        if (b.map_key === mapKey && TERRITORY_RADIUS[b.class] != null) {
+          territoryBuildings.push({
+            x: b.location.x,
+            y: b.location.y,
+            class: b.class,
+            owner_id: b.owner_id,
+          });
+        }
+      }
+      const info = getTerritoryInfo(territoryBuildings, location.x, location.y, player.entity_id);
+
+      if (!info.inTerritory) {
+        return { ok: false, error: "Must build within your territory" };
+      }
+
+      // Territory buildings (infra_tower) require full territory and no contest
+      if (TERRITORY_RADIUS[buildingClass] != null) {
+        if (!info.fullTerritory) {
+          return { ok: false, error: "Territory buildings require full territory (admin outpost or infra tower coverage)" };
+        }
+        if (info.contested) {
+          return { ok: false, error: "Cannot place territory buildings in contested territory" };
+        }
+      }
     }
 
     // Deduct building cost from admin outpost inventory
@@ -86,6 +144,7 @@ export function placeBuilding(
       adminOutpost.inventory[mat as MaterialType] =
         (adminOutpost.inventory[mat as MaterialType] ?? 0) - cost;
     }
+
   }
 
   // Recipe buildings: require producer buildings for non-raw inputs
@@ -116,6 +175,13 @@ export function placeBuilding(
   const def = BUILDING_DEFS[buildingClass];
   const entityId = `bld_${++buildingCounter}`;
 
+  // Apply building capacity research bonus
+  let capacity = def.capacity;
+  if (player.research.includes("storage_buildings")) {
+    const effect = RESEARCH_TREE.storage_buildings.effect!;
+    capacity = Math.round(capacity * effect.multiplier);
+  }
+
   const building: Building = {
     entity_id: entityId,
     class: buildingClass,
@@ -124,7 +190,7 @@ export function placeBuilding(
     map_key: mapKey,
     status: initialStatus,
     inventory: {},
-    capacity: def.capacity,
+    capacity,
     resource_type: buildingClass === "mine" ? tile.resource!.type : undefined,
     production_per_tick:
       buildingClass === "mine"

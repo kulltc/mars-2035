@@ -10,6 +10,7 @@ export function TopBar() {
   const toggleMarket = useGameStore((s) => s.toggleMarket);
   const toggleTechTree = useGameStore((s) => s.toggleTechTree);
   const toggleWorkers = useGameStore((s) => s.toggleWorkers);
+  const toggleMapSelector = useGameStore((s) => s.toggleMapSelector);
   const showMarket = useGameStore((s) => s.showMarket);
   const logout = useGameStore((s) => s.logout);
 
@@ -83,6 +84,15 @@ export function TopBar() {
       </div>
 
       <div className="top-bar-right">
+        <button
+          className="icon-btn"
+          onClick={toggleMapSelector}
+          title="Map Selector"
+          style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
+        >
+          {currentMap.mx},{currentMap.my}
+        </button>
+
         <span className="top-bar-tick">T:{world?.tick ?? 0}</span>
 
         <button

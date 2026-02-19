@@ -538,7 +538,7 @@ body {
 .worker-detail {
   position: absolute;
   z-index: 20;
-  width: 260px;
+  width: 290px;
   background: var(--bg-panel);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-bright);
@@ -916,6 +916,25 @@ body {
   accent-color: var(--accent);
 }
 
+/* ── Resource Filter Groups ── */
+.resource-filter-section { margin-bottom: 4px; }
+.resource-filter-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+}
+.resource-filter-group {
+  margin-bottom: 4px;
+}
+.resource-filter-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 1px;
+  opacity: 0.8;
+}
+
 /* ── Animations ── */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -1011,6 +1030,153 @@ body {
   line-height: 1;
 }
 .tile-detail .td-close:hover { color: var(--text-primary); }
+
+/* ── Research Panel ── */
+.research-track { margin-bottom: 12px; }
+.research-track-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.research-connector {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 0;
+}
+.research-node {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 11px;
+}
+.research-node.completed {
+  border-color: var(--success);
+  background: var(--success-dim);
+}
+.research-node.available {
+  border-color: var(--accent);
+  background: rgba(79, 195, 247, 0.08);
+}
+.research-node.locked {
+  opacity: 0.5;
+}
+.research-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.research-status-icon { font-size: 12px; }
+.research-node.completed .research-status-icon { color: var(--success); }
+.research-node.available .research-status-icon { color: var(--accent); }
+.research-name { flex: 1; }
+.research-desc {
+  color: var(--text-secondary);
+  font-size: 10px;
+  margin-top: 2px;
+}
+.research-cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+.research-cost-item::before {
+  content: "\25CF ";
+  font-size: 6px;
+  vertical-align: middle;
+}
+.research-prereq {
+  font-size: 10px;
+  color: var(--warning);
+  margin-top: 3px;
+}
+
+/* ── Map Selector Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.map-selector-modal {
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  min-width: 320px;
+  max-width: 500px;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.modal-title {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+.map-selector-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.map-selector-grid {
+  display: grid;
+  gap: 4px;
+}
+.map-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  min-height: 48px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.map-cell:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+.map-cell.current {
+  border-color: var(--accent);
+  background: rgba(79, 195, 247, 0.12);
+}
+.map-cell.has-outpost {
+  border-color: var(--success);
+}
+.map-cell.locked {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.map-cell-coords { font-size: 12px; font-weight: 600; }
+.map-cell-star { color: var(--money); font-size: 14px; }
+.map-cell-lock { font-size: 10px; }
+.map-selector-legend {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  text-align: center;
+}
 
 /* ── Utility ── */
 .text-money { color: var(--money); }

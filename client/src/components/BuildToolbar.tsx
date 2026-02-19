@@ -3,12 +3,14 @@ import { useGameStore } from "../state/store.js";
 import {
   BUILDING_DEFS, RESOURCE_TYPES, WORKER_COST,
   type BuildingClass, type MaterialType,
+  getResearchForBuilding,
 } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
 
 const BUILDING_ICONS: Record<string, string> = {
-  admin_outpost: "\u2302", mine: "\u26CF", port: "\u2693",
+  admin_outpost: "\u2302", infra_tower: "\u25E3", research_lab: "\u2697", research_station: "\u2609",
+  mine: "\u26CF", port: "\u2693",
   smelter: "S", magnetic_press: "M", morphic_forge: "F",
   servo_assembly: "V", replication_chamber: "R",
   polymer_kiln: "K", crystal_grower: "G", toroidin_foundry: "T",
@@ -20,7 +22,8 @@ const BUILDING_ICONS: Record<string, string> = {
 };
 
 const BUILDING_COLORS: Record<string, string> = {
-  admin_outpost: "#4fc3f7", mine: "#ffb74d", port: "#81c784",
+  admin_outpost: "#4fc3f7", infra_tower: "#26c6da", research_lab: "#7e57c2", research_station: "#ab47bc",
+  mine: "#ffb74d", port: "#81c784",
   smelter: "#e65100", magnetic_press: "#d84315", morphic_forge: "#bf360c",
   servo_assembly: "#a52714", replication_chamber: "#8b1a1a",
   polymer_kiln: "#7b1fa2", crystal_grower: "#6a1b9a", toroidin_foundry: "#4a148c",
@@ -32,7 +35,7 @@ const BUILDING_COLORS: Record<string, string> = {
 };
 
 const BUILD_SECTIONS: { label: string; color: string; items: BuildingClass[] }[] = [
-  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "mine", "port"] },
+  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "infra_tower", "research_lab", "research_station", "mine", "port"] },
   { label: "Morphic", color: "#e65100", items: ["smelter", "magnetic_press", "morphic_forge", "servo_assembly", "replication_chamber"] },
   { label: "Toroidin", color: "#7b1fa2", items: ["polymer_kiln", "crystal_grower", "toroidin_foundry", "muphrid_lab", "solar_loom"] },
   { label: "Cryogenic", color: "#00838f", items: ["cryo_distillery", "phase_condenser", "xenotherm_reactor", "deep_freeze_synth", "iceworld_refinery"] },
@@ -57,11 +60,19 @@ for (const [cls, def] of Object.entries(BUILDING_DEFS)) {
   if (needed.length > 0) PREREQS.set(cls as BuildingClass, needed);
 }
 
+function formatMaterialName(mat: string): string {
+  if (mat === "money") return "$";
+  return mat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function formatCost(cls: BuildingClass): string {
   const def = BUILDING_DEFS[cls];
   const entries = Object.entries(def.cost).filter(([, v]) => v && v > 0);
   if (entries.length === 0) return "Free";
-  return entries.map(([, amt]) => `$${amt}`).join(", ");
+  const parts = entries.map(([mat, amt]) =>
+    mat === "money" ? `$${amt}` : `${amt} ${formatMaterialName(mat)}`
+  );
+  return parts.join(", ");
 }
 
 export function BuildToolbar() {
@@ -114,10 +125,16 @@ export function BuildToolbar() {
           const prereqs = PREREQS.get(cls);
           const missingPrereqs = prereqs?.filter((p) => !ownedClasses.has(p));
           const locked = missingPrereqs && missingPrereqs.length > 0;
-          const disabled = needsAdmin || alreadyHasAdmin || !!locked;
+
+          // Research gating
+          const requiredResearch = getResearchForBuilding(cls);
+          const researchLocked = requiredResearch && !player.research?.includes(requiredResearch);
+
+          const disabled = needsAdmin || alreadyHasAdmin || !!locked || !!researchLocked;
           const isSelected = buildMode === cls;
 
           let title = `${DISPLAY_NAMES[cls]}\nCost: ${formatCost(cls)}`;
+          if (researchLocked) title += "\n🔒 Requires research to unlock";
           if (locked) title += `\nRequires: ${missingPrereqs!.map((p) => DISPLAY_NAMES[p]).join(", ")}`;
           if (needsAdmin) title += "\nPlace an Admin Outpost first";
 
@@ -128,8 +145,8 @@ export function BuildToolbar() {
               onClick={() => !disabled && setBuildMode(isSelected ? null : cls)}
               title={title}
             >
-              <span className="bc-icon" style={{ color: BUILDING_COLORS[cls] ?? "#888" }}>
-                {BUILDING_ICONS[cls] ?? cls[0]}
+              <span className="bc-icon" style={{ color: researchLocked ? "#555" : (BUILDING_COLORS[cls] ?? "#888") }}>
+                {researchLocked ? "\uD83D\uDD12" : (BUILDING_ICONS[cls] ?? cls[0])}
               </span>
               <span className="bc-name">{DISPLAY_NAMES[cls] ?? cls}</span>
               <span className="bc-cost">{formatCost(cls)}</span>

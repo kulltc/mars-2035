@@ -14,6 +14,7 @@ import { TechTree } from "./components/TechTree.js";
 import { MarketPanel } from "./components/MarketPanel.js";
 import { WorkerListPanel } from "./components/WorkerListPanel.js";
 import { TileDetail } from "./components/TileDetail.js";
+import { MapSelector } from "./components/MapSelector.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -27,6 +28,7 @@ export function App() {
   const showTechTree = useGameStore((s) => s.showTechTree);
   const showMarket = useGameStore((s) => s.showMarket);
   const showWorkers = useGameStore((s) => s.showWorkers);
+  const showMapSelector = useGameStore((s) => s.showMapSelector);
 
   // Connect to map via WS
   useMapSubscription();
@@ -81,6 +83,7 @@ export function App() {
       <Notifications />
       {showTechTree && <TechTree />}
       {showWorkers && <WorkerListPanel />}
+      {showMapSelector && <MapSelector />}
     </div>
   );
 }
