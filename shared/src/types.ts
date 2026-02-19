@@ -137,6 +137,8 @@ export interface Building {
   auto_sell?: Partial<Record<ResourceType, AutoSellRule>>;
   // Routes: move resources to other buildings each tick
   outgoing_routes?: OutgoingRoute[];
+  // Per-material minimum stock to keep (not shipped out by workers)
+  buffer_stock?: Partial<Record<MaterialType, number>>;
 }
 
 // ── Worker Task ──
@@ -264,7 +266,8 @@ export type CommandType =
   | "sell_building"
   | "remove_worker"
   | "configure_worker"
-  | "do_research";
+  | "do_research"
+  | "set_buffer_stock";
 
 export interface Command {
   id: string;

@@ -87,7 +87,17 @@ export function processWorkers(store: WorldStore) {
         const workerRemaining = res === "money"
           ? Math.max(0, WORKER_MONEY_CAPACITY - (worker.inventory.money ?? 0))
           : worker.capacity - totalInventory(worker.inventory);
-        const amount = Math.min(available, workerRemaining);
+        // Respect buffer stock: only pick up amounts above the buffer threshold
+        const bufferReserve = src.buffer_stock?.[res] ?? 0;
+        const shippable = Math.max(0, available - bufferReserve);
+        const amount = Math.min(shippable, workerRemaining);
+
+        if (amount <= 0) {
+          // Source is empty or below buffer — skip this pickup entirely
+          clearWorkerTask(store, worker);
+          worker.state = "idle";
+          break;
+        }
 
         if (amount > 0) {
           // Deduct from output_buffer first, then inventory
@@ -247,6 +257,11 @@ function generatePickupTasks(store: WorldStore) {
     if (!building.outgoing_routes) continue;
 
     for (const route of building.outgoing_routes) {
+      // Skip if building has no shippable stock (respecting buffer_stock)
+      const available = (building.output_buffer?.[route.resource] ?? 0) + (building.inventory[route.resource] ?? 0);
+      const buffer = building.buffer_stock?.[route.resource] ?? 0;
+      if (available - buffer <= 0) continue;
+
       const exists = taskExists(store, "pickup", (t: PickupTask) =>
         t.from_building_id === building.entity_id &&
         t.to_building_id === route.to_building_id &&

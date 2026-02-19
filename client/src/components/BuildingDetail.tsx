@@ -47,6 +47,9 @@ export function BuildingDetail() {
   const updateBuilding = useGameStore((s) => s.updateBuilding);
   const addNotification = useGameStore((s) => s.addNotification);
 
+  // Local buffer stock state
+  const [localBufferStock, setLocalBufferStock] = useState<Partial<Record<MaterialType, number>>>({});
+
   // Local auto-sell state
   const [localAutoSell, setLocalAutoSell] = useState<Partial<Record<ResourceType, AutoSellRule | null>>>({});
   const trackedId = useRef<string | null>(null);
@@ -63,6 +66,7 @@ export function BuildingDetail() {
     if (building?.entity_id !== trackedId.current) {
       trackedId.current = building?.entity_id ?? null;
       setLocalAutoSell({});
+      setLocalBufferStock({});
     }
   }, [building?.entity_id]);
 
@@ -265,6 +269,64 @@ export function BuildingDetail() {
           })
         )}
       </div>
+
+      {/* Buffer Stock */}
+      {(() => {
+        // Show buffer stock for materials present in inventory, output_buffer, or already having a buffer
+        const materials = new Set<MaterialType>();
+        for (const key of Object.keys(building.inventory) as MaterialType[]) {
+          if ((building.inventory[key] ?? 0) > 0 && key !== "money") materials.add(key);
+        }
+        if (building.output_buffer) {
+          for (const key of Object.keys(building.output_buffer) as MaterialType[]) {
+            if ((building.output_buffer[key] ?? 0) > 0) materials.add(key);
+          }
+        }
+        if (building.buffer_stock) {
+          for (const key of Object.keys(building.buffer_stock) as MaterialType[]) {
+            if ((building.buffer_stock[key] ?? 0) > 0) materials.add(key);
+          }
+        }
+        // Also include routed resources
+        for (const route of effectiveRoutes) {
+          materials.add(route.resource);
+        }
+        if (materials.size === 0) return null;
+        const sorted = [...materials].sort();
+        return (
+          <div className="bd-section">
+            <div className="bd-section-title">Buffer Stock</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {sorted.map((mat) => {
+                const serverVal = building.buffer_stock?.[mat] ?? 0;
+                const val = mat in localBufferStock ? (localBufferStock[mat] ?? 0) : serverVal;
+                return (
+                  <div key={mat} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                    <span style={{ flex: 1, color: "var(--text-secondary)" }}>{mat.replace(/_/g, " ")}</span>
+                    <input
+                      type="number"
+                      className="input"
+                      min="0"
+                      step="1"
+                      value={val}
+                      onChange={(e) => {
+                        const amount = Math.max(0, Math.round(Number(e.target.value)));
+                        setLocalBufferStock((prev) => ({ ...prev, [mat]: amount }));
+                        submitCommand("set_buffer_stock", {
+                          building_id: building.entity_id,
+                          resource: mat,
+                          amount,
+                        });
+                      }}
+                      style={{ width: 60, padding: "1px 4px", fontSize: 11 }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Auto-sell (port only) */}
       {building.class === "port" && (

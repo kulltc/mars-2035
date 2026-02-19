@@ -516,6 +516,39 @@ function handleDoResearch(store: WorldStore, player: Player, data: Record<string
   };
 }
 
+function handleSetBufferStock(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { building_id, resource, amount } = data as {
+    building_id: string;
+    resource: MaterialType;
+    amount: number;
+  };
+
+  const building = store.buildings.get(building_id);
+  if (!building) return { ok: false, error: "Building not found" };
+  if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+
+  if (amount > 0) {
+    if (!building.buffer_stock) building.buffer_stock = {};
+    building.buffer_stock[resource] = amount;
+  } else {
+    if (building.buffer_stock) {
+      delete building.buffer_stock[resource];
+      if (Object.keys(building.buffer_stock).length === 0) {
+        delete building.buffer_stock;
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    events: [{
+      type: "route_executed",
+      data: { building_id, resource, buffer_stock: amount, configured: true },
+      mapKey: building.map_key,
+    }],
+  };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -530,6 +563,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   remove_worker: handleRemoveWorker,
   configure_worker: handleConfigureWorker,
   do_research: handleDoResearch,
+  set_buffer_stock: handleSetBufferStock,
 };
 
 // ── Main processor ──
