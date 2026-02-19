@@ -19,7 +19,9 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "sell_building",
   "remove_worker",
   "configure_worker",
+  "do_research",
   "set_buffer_stock",
+  "forfeit",
 ]);
 
 let commandCounter = 0;

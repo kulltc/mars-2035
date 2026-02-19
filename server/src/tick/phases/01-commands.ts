@@ -549,6 +549,59 @@ function handleSetBufferStock(store: WorldStore, player: Player, data: Record<st
   };
 }
 
+function handleForfeit(store: WorldStore, player: Player, _data: Record<string, unknown>): HandlerResult {
+  const playerId = player.entity_id;
+
+  // Remove all workers belonging to this player
+  for (const [wid, worker] of store.workers) {
+    if (worker.owner_id !== playerId) continue;
+    if (worker.current_task_id) store.taskQueue.delete(worker.current_task_id);
+    store.workers.delete(wid);
+  }
+
+  // Remove all buildings belonging to this player
+  const buildingIds: string[] = [];
+  for (const [bid, building] of store.buildings) {
+    if (building.owner_id !== playerId) continue;
+    buildingIds.push(bid);
+
+    // Clear tile
+    const mapTiles = store.tiles.get(building.map_key);
+    if (mapTiles) {
+      const tk = tileKey(building.location.x, building.location.y);
+      const tile = mapTiles.get(tk);
+      if (tile) delete tile.building_id;
+    }
+
+    store.buildings.delete(bid);
+  }
+
+  // Remove routes referencing deleted buildings from other players' buildings
+  for (const b of store.buildings.values()) {
+    if (!b.outgoing_routes) continue;
+    b.outgoing_routes = b.outgoing_routes.filter(
+      (r) => !buildingIds.includes(r.to_building_id)
+    );
+  }
+
+  // Remove any remaining tasks for this player
+  for (const [taskId, task] of store.taskQueue) {
+    if (task.owner_id === playerId) store.taskQueue.delete(taskId);
+  }
+
+  // Reset player state
+  player.map_accounts = {};
+  player.research = [];
+
+  return {
+    ok: true,
+    events: [{
+      type: "player_registered",
+      data: { player_id: playerId, name: player.name, forfeit: true },
+    }],
+  };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -564,6 +617,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   configure_worker: handleConfigureWorker,
   do_research: handleDoResearch,
   set_buffer_stock: handleSetBufferStock,
+  forfeit: handleForfeit,
 };
 
 // ── Main processor ──

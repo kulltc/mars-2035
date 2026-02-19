@@ -267,7 +267,8 @@ export type CommandType =
   | "remove_worker"
   | "configure_worker"
   | "do_research"
-  | "set_buffer_stock";
+  | "set_buffer_stock"
+  | "forfeit";
 
 export interface Command {
   id: string;

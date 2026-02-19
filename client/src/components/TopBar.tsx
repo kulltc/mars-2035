@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useGameStore } from "../state/store.js";
+import { submitCommand } from "../api/client.js";
 
 export function TopBar() {
   const player = useGameStore((s) => s.player);
@@ -13,6 +14,8 @@ export function TopBar() {
   const toggleMapSelector = useGameStore((s) => s.toggleMapSelector);
   const showMarket = useGameStore((s) => s.showMarket);
   const logout = useGameStore((s) => s.logout);
+  const addNotification = useGameStore((s) => s.addNotification);
+  const [showForfeitConfirm, setShowForfeitConfirm] = useState(false);
 
   if (!player || !currentMap) return null;
 
@@ -113,6 +116,15 @@ export function TopBar() {
 
         <button
           className="icon-btn"
+          onClick={() => setShowForfeitConfirm(true)}
+          title="Forfeit - Reset all progress"
+          style={{ fontSize: 10, color: "var(--danger)" }}
+        >
+          &#x2716;
+        </button>
+
+        <button
+          className="icon-btn"
           onClick={logout}
           title="Logout"
           style={{ fontSize: 12 }}
@@ -120,6 +132,48 @@ export function TopBar() {
           &#x2192;
         </button>
       </div>
+
+      {showForfeitConfirm && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999,
+        }} onClick={() => setShowForfeitConfirm(false)}>
+          <div style={{
+            background: "var(--bg-panel)", border: "1px solid var(--danger)",
+            borderRadius: 8, padding: "20px 28px", maxWidth: 360, textAlign: "center",
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--danger)", marginBottom: 8 }}>
+              Forfeit Game?
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 16 }}>
+              This will permanently destroy all your buildings, workers, and research.
+              You will restart with only starting money. This cannot be undone.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <button
+                className="btn btn-sm"
+                onClick={() => setShowForfeitConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={async () => {
+                  setShowForfeitConfirm(false);
+                  const res = await submitCommand("forfeit", {});
+                  if (res.error) {
+                    addNotification(`Forfeit failed: ${res.error}`, "error");
+                  } else {
+                    addNotification("Game forfeited. You can place a new admin outpost to start over.", "warning");
+                  }
+                }}
+              >
+                Forfeit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
