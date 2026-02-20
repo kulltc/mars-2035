@@ -46,20 +46,22 @@ export function TopBar() {
   const [showForfeitConfirm, setShowForfeitConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const inventoryRef = useRef<HTMLDivElement>(null);
+  const menuContainerRef = useRef<HTMLDivElement>(null);
+  const inventoryContainerRef = useRef<HTMLDivElement>(null);
 
   // Click-outside to dismiss popups
   useEffect(() => {
     if (!showMainMenu && !showInventory) return;
-    const handler = (e: MouseEvent) => {
-      if (showMainMenu && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+    const handler = (e: PointerEvent) => {
+      if (showMainMenu && menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
         toggleMainMenu();
       }
-      if (showInventory && inventoryRef.current && !inventoryRef.current.contains(e.target as Node)) {
+      if (showInventory && inventoryContainerRef.current && !inventoryContainerRef.current.contains(e.target as Node)) {
         toggleInventory();
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
   }, [showMainMenu, showInventory, toggleMainMenu, toggleInventory]);
 
   if (!player || !currentMap) return null;
@@ -209,6 +211,7 @@ export function TopBar() {
       {/* Money + raw material pills (clickable for inventory) */}
       <div
         className="top-bar-resources"
+        ref={inventoryContainerRef}
         onClick={toggleInventory}
         title="Click to view full inventory"
         style={{ cursor: "pointer" }}
@@ -246,7 +249,7 @@ export function TopBar() {
         )}
 
         {/* Hamburger menu */}
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative" }} ref={menuContainerRef}>
           <button
             className={`icon-btn ${showMainMenu ? "active" : ""}`}
             onClick={toggleMainMenu}

@@ -83,6 +83,8 @@ export function App() {
         <WorkerDetail />
         <ResourcePicker />
         {showMarket && <MarketPanel />}
+        {showTechTree && <TechTree />}
+        {showWorkers && <WorkerListPanel />}
         <TutorialChecklist />
       </div>
       {isMobile ? (
@@ -98,8 +100,6 @@ export function App() {
         <BuildToolbar />
       )}
       <Notifications />
-      {showTechTree && <TechTree />}
-      {showWorkers && <WorkerListPanel />}
       {showMapSelector && <MapSelector />}
     </div>
   );

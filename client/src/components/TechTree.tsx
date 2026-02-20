@@ -79,7 +79,11 @@ export function TechTree() {
   const toggleTechTree = useGameStore((s) => s.toggleTechTree);
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) toggleTechTree(); }}>
+    <div
+      className="modal-overlay tech-tree-overlay"
+      style={{ position: "absolute", inset: 0 }}
+      onClick={(e) => { if (e.target === e.currentTarget) toggleTechTree(); }}
+    >
       <div className="modal-content">
         <div className="modal-header">
           <span className="modal-title">Tech Tree</span>

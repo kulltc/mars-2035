@@ -30,7 +30,11 @@ export function WorkerListPanel() {
   const activeCount = myWorkers.filter((w) => w.worker_status === "active").length;
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) toggleWorkers(); }}>
+    <div
+      className="modal-overlay worker-list-overlay"
+      style={{ position: "absolute", inset: 0 }}
+      onClick={(e) => { if (e.target === e.currentTarget) toggleWorkers(); }}
+    >
       <div className="modal-content" style={{ maxWidth: 520 }}>
         <div className="modal-header">
           <span className="modal-title">Workers ({activeCount}/{myWorkers.length} active)</span>
