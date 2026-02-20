@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useGameStore } from "../state/store.js";
 import { submitCommand } from "../api/client.js";
 import { useIsMobile } from "../hooks/useIsMobile.js";
-import type { MaterialType } from "@mars-2035/shared";
+import { districtName, sectorName, type MaterialType } from "@mars-2035/shared";
 
 const MATERIAL_GROUPS: { label: string; color: string; items: MaterialType[] }[] = [
   { label: "Raw", color: "var(--text-secondary)", items: ["steel", "silicon", "polymer", "rare_earth", "carbon"] },
@@ -29,6 +29,7 @@ export function TopBar() {
   const player = useGameStore((s) => s.player);
   const setPlayer = useGameStore((s) => s.setPlayer);
   const buildings = useGameStore((s) => s.buildings);
+  const world = useGameStore((s) => s.world);
   const currentMap = useGameStore((s) => s.currentMap);
   const toggleMarket = useGameStore((s) => s.toggleMarket);
   const toggleTechTree = useGameStore((s) => s.toggleTechTree);
@@ -65,6 +66,17 @@ export function TopBar() {
   }, [showMainMenu, showInventory, toggleMainMenu, toggleInventory]);
 
   if (!player || !currentMap) return null;
+
+  const districtLabel = districtName(currentMap.dx, currentMap.dy, world?.districts_x);
+  const sectorLabel = sectorName(
+    currentMap.dx,
+    currentMap.dy,
+    currentMap.mx,
+    currentMap.my,
+    world?.districts_x,
+    world?.maps_per_district_x,
+    world?.maps_per_district_y,
+  );
 
   const adminBuilding = buildings.find(
     (b) => b.class === "admin_outpost" && b.owner_id === player.entity_id
@@ -166,7 +178,7 @@ export function TopBar() {
             {player.name}
           </div>
           <button className="main-menu-item" onClick={() => { toggleMainMenu(); toggleMapSelector(); }}>
-            Map Selector ({currentMap.mx},{currentMap.my})
+            Sector Selector · {sectorLabel}
           </button>
           <button className="main-menu-item" onClick={() => { toggleMainMenu(); toggleMarket(); }}>
             Market
@@ -228,12 +240,11 @@ export function TopBar() {
         {!isMobile && (
           <>
             <button
-              className="icon-btn"
+              className="icon-btn map-selector-btn"
               onClick={toggleMapSelector}
-              title="Map Selector"
-              style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
+              title={`Sector Selector · ${districtLabel} · ${sectorLabel}`}
             >
-              {currentMap.mx},{currentMap.my}
+              {sectorLabel}
             </button>
             <button
               className={`icon-btn ${showMarket ? "active" : ""}`}

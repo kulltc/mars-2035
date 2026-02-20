@@ -33,7 +33,7 @@ export const RESEARCH_TREE: Record<string, ResearchDef> = {
   },
   unlock_new_map: {
     id: "unlock_new_map",
-    name: "Colonial Expansion",
+    name: "Planetary Expansion",
     track: "diplomacy",
     cost: { morphic_core: 2, xenotherm_crystal: 2, money: 2000 },
     requires: ["unlock_research_station"],
@@ -57,6 +57,15 @@ export const RESEARCH_TREE: Record<string, ResearchDef> = {
     requires: ["storage_buildings"],
     description: "Increase worker carry capacity by 50%.",
     effect: { type: "worker_capacity", multiplier: 1.5 },
+  },
+  logistics_quantum_routing: {
+    id: "logistics_quantum_routing",
+    name: "Quantum Logistics",
+    track: "logistics",
+    cost: { money: 2000, morphic_core: 2, xenotherm_crystal: 2, autonomic_matrix: 1, zero_point_shard: 1 },
+    requires: ["storage_workers"],
+    description: "Unlock Quantum Relay construction for instant cross-sector material routing.",
+    unlocks: "quantum_relay",
   },
 };
 

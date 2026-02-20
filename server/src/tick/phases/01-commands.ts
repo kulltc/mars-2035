@@ -10,6 +10,7 @@ import type {
   MaterialType,
   OutgoingRoute,
   Player,
+  QuantumRelayRule,
   ResourceType,
   WorkerFilter,
 } from "@mars-2035/shared";
@@ -24,6 +25,8 @@ type HandlerResult =
   | { ok: false; error: string };
 
 type CommandHandler = (store: WorldStore, player: Player, data: Record<string, unknown>) => HandlerResult;
+
+const MAX_QUANTUM_RULES = 3;
 
 // ── Handlers ──
 
@@ -87,17 +90,20 @@ function handleTransfer(store: WorldStore, player: Player, data: Record<string, 
   const to = store.buildings.get(to_building_id);
   if (!to) return { ok: false, error: "Destination building not found" };
   if (to.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
-  if (from.map_key !== to.map_key) return { ok: false, error: "Buildings must be on same map" };
+
+  if (material !== "money") {
+    return { ok: false, error: "Only money transfers are supported" };
+  }
+  if (from.class !== "admin_outpost" || to.class !== "admin_outpost") {
+    return { ok: false, error: "Money transfers must be admin outpost to admin outpost" };
+  }
 
   const bufferAvailable = from.output_buffer?.[material] ?? 0;
   const invAvailable = from.inventory[material] ?? 0;
   const available = bufferAvailable + invAvailable;
   if (available < amount) return { ok: false, error: `Insufficient ${material} (have ${available.toFixed(1)})` };
 
-  // Clamp to destination remaining capacity
-  const destRemaining = remainingCapacity(to.inventory, to.capacity);
-  const actual = Math.min(amount, destRemaining);
-  if (actual <= 0) return { ok: false, error: "Destination is full" };
+  const actual = amount;
 
   // Deduct from output_buffer first, then inventory
   let rem = actual;
@@ -111,13 +117,7 @@ function handleTransfer(store: WorldStore, player: Player, data: Record<string, 
   }
   to.inventory[material] = (to.inventory[material] ?? 0) + actual;
 
-  if (
-    material === "money" &&
-    actual > 0 &&
-    from.class === "port" &&
-    to.class === "admin_outpost" &&
-    player.tutorial_step === 5
-  ) {
+  if (actual > 0 && player.tutorial_step === 5) {
     player.tutorial_step = 6;
   }
 
@@ -398,6 +398,10 @@ function handleSellBuilding(store: WorldStore, player: Player, data: Record<stri
     b.outgoing_routes = b.outgoing_routes.filter(
       (r) => r.to_building_id !== building_id
     );
+    if (b.quantum_rules) {
+      b.quantum_rules = b.quantum_rules.filter((r) => r.to_building_id !== building_id);
+      if (b.quantum_rules.length === 0) delete b.quantum_rules;
+    }
   }
 
   // Remove tasks referencing this building
@@ -601,6 +605,77 @@ function handleSetBufferStock(store: WorldStore, player: Player, data: Record<st
   };
 }
 
+function handleConfigureQuantumRule(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { building_id, to_building_id, materials } = data as {
+    building_id: string;
+    to_building_id: string;
+    materials: MaterialType[];
+  };
+
+  const building = store.buildings.get(building_id);
+  if (!building) return { ok: false, error: "Building not found" };
+  if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+  if (building.class !== "quantum_relay") return { ok: false, error: "Only quantum relays support quantum rules" };
+
+  const destination = store.buildings.get(to_building_id);
+  if (!destination) return { ok: false, error: "Destination building not found" };
+  if (destination.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+  if (destination.class !== "quantum_relay") return { ok: false, error: "Destination must be a quantum relay" };
+  if (destination.entity_id === building.entity_id) return { ok: false, error: "Cannot route to self" };
+
+  const unique = Array.from(new Set((materials ?? []).filter((m) => m && m !== "money")));
+  if (unique.length === 0) return { ok: false, error: "Select at least one material" };
+
+  if (!building.quantum_rules) building.quantum_rules = [];
+
+  const existingIdx = building.quantum_rules.findIndex((r) => r.to_building_id === to_building_id);
+  if (existingIdx >= 0) {
+    building.quantum_rules[existingIdx] = { to_building_id, materials: unique };
+  } else {
+    if (building.quantum_rules.length >= MAX_QUANTUM_RULES) {
+      return { ok: false, error: `Maximum ${MAX_QUANTUM_RULES} quantum rules` };
+    }
+    const newRule: QuantumRelayRule = { to_building_id, materials: unique };
+    building.quantum_rules.push(newRule);
+  }
+
+  return {
+    ok: true,
+    events: [{
+      type: "route_executed",
+      data: { building_id, to_building_id, materials: unique, quantum_rule: true, configured: true },
+      mapKey: building.map_key,
+    }],
+  };
+}
+
+function handleDeleteQuantumRule(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { building_id, to_building_id } = data as {
+    building_id: string;
+    to_building_id: string;
+  };
+
+  const building = store.buildings.get(building_id);
+  if (!building) return { ok: false, error: "Building not found" };
+  if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+  if (building.class !== "quantum_relay") return { ok: false, error: "Only quantum relays support quantum rules" };
+  if (!building.quantum_rules || building.quantum_rules.length === 0) return { ok: false, error: "No quantum rules configured" };
+
+  const before = building.quantum_rules.length;
+  building.quantum_rules = building.quantum_rules.filter((r) => r.to_building_id !== to_building_id);
+  if (building.quantum_rules.length === before) return { ok: false, error: "Quantum rule not found" };
+  if (building.quantum_rules.length === 0) delete building.quantum_rules;
+
+  return {
+    ok: true,
+    events: [{
+      type: "route_executed",
+      data: { building_id, to_building_id, quantum_rule: true, deleted: true },
+      mapKey: building.map_key,
+    }],
+  };
+}
+
 function handleForfeit(store: WorldStore, player: Player, _data: Record<string, unknown>): HandlerResult {
   const playerId = player.entity_id;
 
@@ -676,6 +751,8 @@ const handlers: Record<CommandType, CommandHandler> = {
   configure_worker: handleConfigureWorker,
   do_research: handleDoResearch,
   set_buffer_stock: handleSetBufferStock,
+  configure_quantum_rule: handleConfigureQuantumRule,
+  delete_quantum_rule: handleDeleteQuantumRule,
   forfeit: handleForfeit,
   dismiss_tutorial: handleDismissTutorial,
 };

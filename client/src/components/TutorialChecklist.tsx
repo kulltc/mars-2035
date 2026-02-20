@@ -5,9 +5,9 @@ import { submitCommand } from "../api/client.js";
 const STEPS = [
   "Build an admin outpost",
   "Build a mine",
-  "Build a trading outpost & set a route by holding and dragging from mine to trading outpost",
-  "Sell at least 1 unit of material",
-  "Ship money from port back to outpost",
+  "Build a trade center & set a route by holding and dragging from mine to trade center",
+  "Sell at least 1 unit of material (make sure to enable the material for sale in the trade center UI)",
+  "Ship money from trade center back to outpost",
 ];
 
 export function TutorialChecklist() {
@@ -32,7 +32,7 @@ export function TutorialChecklist() {
           <div className="tutorial-congrats-title">Well done!</div>
           <p className="tutorial-congrats-text">
             You've completed your first cash cycle. Money is now flowing from
-            mine → port → outpost. Keep expanding, but don't run out of cash! 
+            mine → trade center → outpost. Keep expanding, but don't run out of cash! 
             Every building and worker costs upkeep, make sure they're worth it.
           </p>
           <button

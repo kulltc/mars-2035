@@ -14,10 +14,11 @@ const BUILDING_COLORS: Record<string, string> = {
   deep_freeze_synth: "#00363a", iceworld_refinery: "#002626",
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
+  quantum_relay: "#64b5f6",
 };
 
 const CHAIN_SECTIONS: { label: string; color: string; items: BuildingClass[] }[] = [
-  { label: "Core Buildings", color: "#4fc3f7", items: ["admin_outpost", "mine", "port", "infra_tower", "research_lab", "research_station"] },
+  { label: "Core Buildings", color: "#4fc3f7", items: ["admin_outpost", "mine", "port", "infra_tower", "research_lab", "research_station", "quantum_relay"] },
   { label: "Morphic Chain", color: "#e65100", items: ["smelter", "magnetic_press", "morphic_forge", "servo_assembly", "replication_chamber"] },
   { label: "Toroidin Chain", color: "#7b1fa2", items: ["polymer_kiln", "crystal_grower", "toroidin_foundry", "muphrid_lab", "solar_loom"] },
   { label: "Cryogenic Chain", color: "#00838f", items: ["cryo_distillery", "phase_condenser", "xenotherm_reactor", "deep_freeze_synth", "iceworld_refinery"] },
@@ -31,6 +32,7 @@ const CORE_DESCRIPTIONS: Record<string, string> = {
   infra_tower: "Extends buildable area around it.",
   research_lab: "Produces research points for unlocking new buildings.",
   research_station: "Advanced research facility for higher-tier unlocks.",
+  quantum_relay: "Instantly transfers selected materials to linked relays across sectors.",
 };
 
 function formatMat(mat: string): string {
@@ -109,9 +111,9 @@ export function TechTree() {
         <div style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
           <strong>Tips:</strong>
           <ul style={{ paddingLeft: 16, marginTop: 4 }}>
-            <li>Drag from one building to another on the map to create a resource route</li>
+            <li>Drag from one building to another on the sector to create a resource route</li>
             <li>Workers automatically haul materials along configured routes</li>
-            <li>Use Auto-Sell on Trading Outposts to sell processed goods</li>
+            <li>Use Auto-Sell on Trade Centers to sell processed goods</li>
             <li>Higher-tier materials sell for significantly more on the market</li>
           </ul>
         </div>

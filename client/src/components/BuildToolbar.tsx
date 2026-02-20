@@ -9,6 +9,7 @@ import { submitCommand } from "../api/client.js";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
 import { useIsMobile } from "../hooks/useIsMobile.js";
 import { BottomSheet } from "./BottomSheet.js";
+import { LockIcon } from "./LockIcon.js";
 
 const BUILDING_ICONS: Record<string, string> = {
   admin_outpost: "⌂", infra_tower: "△", research_lab: "⚗", research_station: "◉",
@@ -21,6 +22,7 @@ const BUILDING_ICONS: Record<string, string> = {
   deep_freeze_synth: "❆", iceworld_refinery: "⬡",
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
+  quantum_relay: "⬢",
 };
 
 const BUILDING_COLORS: Record<string, string> = {
@@ -34,10 +36,11 @@ const BUILDING_COLORS: Record<string, string> = {
   deep_freeze_synth: "#00363a", iceworld_refinery: "#002626",
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
+  quantum_relay: "#64b5f6",
 };
 
 const BUILD_SECTIONS: { label: string; color: string; items: BuildingClass[] }[] = [
-  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "infra_tower", "research_lab", "research_station", "mine", "port"] },
+  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "infra_tower", "research_lab", "research_station", "mine", "port", "quantum_relay"] },
   { label: "Morphic", color: "#e65100", items: ["smelter", "magnetic_press", "morphic_forge", "servo_assembly", "replication_chamber"] },
   { label: "Toroidin", color: "#7b1fa2", items: ["polymer_kiln", "crystal_grower", "toroidin_foundry", "muphrid_lab", "solar_loom"] },
   { label: "Cryogenic", color: "#00838f", items: ["cryo_distillery", "phase_condenser", "xenotherm_reactor", "deep_freeze_synth", "iceworld_refinery"] },
@@ -75,6 +78,13 @@ function formatCost(cls: BuildingClass): string {
     mat === "money" ? `$${amt}` : `${amt} ${formatMaterialName(mat)}`
   );
   return parts.join(", ");
+}
+
+function formatMenuCost(cls: BuildingClass): string {
+  if (cls !== "quantum_relay") return formatCost(cls);
+  const entries = Object.entries(BUILDING_DEFS[cls].cost).filter(([, v]) => v && v > 0);
+  const money = entries.find(([mat]) => mat === "money")?.[1] ?? 0;
+  return `$${money} and ${entries.length} Materials`;
 }
 
 export function BuildToolbar() {
@@ -139,7 +149,7 @@ export function BuildToolbar() {
           const isSelected = buildMode === cls;
 
           let title = `${DISPLAY_NAMES[cls]}\nCost: ${formatCost(cls)}`;
-          if (researchLocked) title += "\n🔒 Requires research to unlock";
+          if (researchLocked) title += "\nLocked: Requires research to unlock";
           if (locked) title += `\nRequires: ${missingPrereqs!.map((p) => DISPLAY_NAMES[p]).join(", ")}`;
           if (needsAdmin) title += "\nPlace an Admin Outpost first";
 
@@ -155,10 +165,10 @@ export function BuildToolbar() {
               title={title}
             >
               <span className="bc-icon" style={{ color: researchLocked ? "#555" : (BUILDING_COLORS[cls] ?? "#888") }}>
-                {researchLocked ? "\uD83D\uDD12" : (BUILDING_ICONS[cls] ?? cls[0])}
+                {researchLocked ? <LockIcon /> : (BUILDING_ICONS[cls] ?? cls[0])}
               </span>
               <span className="bc-name">{DISPLAY_NAMES[cls] ?? cls}</span>
-              <span className="bc-cost">{formatCost(cls)}</span>
+              <span className="bc-cost">{formatMenuCost(cls)}</span>
             </div>
           );
         })}

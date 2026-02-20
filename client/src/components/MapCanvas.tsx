@@ -45,6 +45,7 @@ const BUILDING_COLORS: Record<string, string> = {
   deep_freeze_synth: "#00363a", iceworld_refinery: "#002626",
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
+  quantum_relay: "#64b5f6",
 };
 
 const BUILDING_ICONS: Record<string, string> = {
@@ -58,11 +59,12 @@ const BUILDING_ICONS: Record<string, string> = {
   deep_freeze_synth: "❆", iceworld_refinery: "⬡",
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
+  quantum_relay: "⬢",
 };
 
 export const DISPLAY_NAMES: Record<string, string> = {
   admin_outpost: "Admin Outpost", infra_tower: "Infra Tower", research_lab: "Research Lab", research_station: "Research Station",
-  mine: "Mine", port: "Trading Outpost",
+  mine: "Mine", port: "Trade Center",
   smelter: "Smelter", magnetic_press: "Magnetic Press", morphic_forge: "Morphic Forge",
   servo_assembly: "Servo Assembly", replication_chamber: "Replication Chamber",
   polymer_kiln: "Polymer Kiln", crystal_grower: "Crystal Grower", toroidin_foundry: "Toroidin Foundry",
@@ -71,6 +73,7 @@ export const DISPLAY_NAMES: Record<string, string> = {
   deep_freeze_synth: "Deep-Freeze Synth", iceworld_refinery: "Iceworld Refinery",
   resonance_tuner: "Resonance Tuner", neural_loom: "Neural Loom", psychophysical_amp: "Psychophysical Amp",
   dampening_forge: "Dampening Forge", consciousness_engine: "Consciousness Engine",
+  quantum_relay: "Quantum Relay",
 };
 
 function isInForeignTerritory(
@@ -99,6 +102,21 @@ function getRouteColor(resource: string): string {
   if (cryo.includes(resource)) return "#4dd0e1";
   if (psycho.includes(resource)) return "#f48fb1";
   return "#a5d6a7"; // carbon
+}
+
+function formatMaterialName(mat: string): string {
+  if (mat === "money") return "$";
+  return mat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatBuildCost(cls: string): string {
+  const def = BUILDING_DEFS[cls as BuildingClass];
+  if (!def) return "Unknown";
+  const entries = Object.entries(def.cost).filter(([, v]) => v && v > 0);
+  if (entries.length === 0) return "Free";
+  return entries
+    .map(([mat, amt]) => (mat === "money" ? `$${amt}` : `${amt} ${formatMaterialName(mat)}`))
+    .join(", ");
 }
 
 // ── Tooltip state type ──
@@ -1254,7 +1272,9 @@ export function MapCanvas() {
       {/* Build mode banner */}
       {state.buildMode && (
         <div className="build-mode-indicator">
-          Placing: {DISPLAY_NAMES[state.buildMode] ?? state.buildMode}
+          <span className="build-mode-label">
+            Placing: {DISPLAY_NAMES[state.buildMode] ?? state.buildMode} - Cost: {formatBuildCost(state.buildMode)}
+          </span>
           {isMobile ? (
             <button
               className="build-mode-cancel"

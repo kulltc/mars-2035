@@ -103,6 +103,7 @@ export const BUILDING_CLASSES = [
   "psychophysical_amp",
   "dampening_forge",
   "consciousness_engine",
+  "quantum_relay",
 ] as const;
 
 export type BuildingClass = (typeof BUILDING_CLASSES)[number];
@@ -117,6 +118,11 @@ export interface AutoSellRule {
 export interface OutgoingRoute {
   resource: MaterialType;
   to_building_id: string;
+}
+
+export interface QuantumRelayRule {
+  to_building_id: string;
+  materials: MaterialType[];
 }
 
 export interface Building {
@@ -137,6 +143,8 @@ export interface Building {
   auto_sell?: Partial<Record<ResourceType, AutoSellRule>>;
   // Routes: move resources to other buildings each tick
   outgoing_routes?: OutgoingRoute[];
+  // Quantum relay rules: instant transfer to another relay each tick
+  quantum_rules?: QuantumRelayRule[];
   // Per-material minimum stock to keep (not shipped out by workers)
   buffer_stock?: Partial<Record<MaterialType, number>>;
 }
@@ -270,6 +278,8 @@ export type CommandType =
   | "configure_worker"
   | "do_research"
   | "set_buffer_stock"
+  | "configure_quantum_rule"
+  | "delete_quantum_rule"
   | "import"
   | "forfeit"
   | "dismiss_tutorial";

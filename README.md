@@ -1,6 +1,6 @@
 # Mars 2035
 
-A multiplayer Mars colonization strategy game. Monorepo with three workspaces: `shared` (types & constants), `server` (Fastify 5 + WebSocket), and `client` (React 18 + Vite 6).
+A multiplayer Martian economic simulation & strategy game. Monorepo with three workspaces: `shared` (types & constants), `server` (Fastify 5 + WebSocket), and `client` (React 18 + Vite 6).
 
 ## Prerequisites
 
@@ -26,6 +26,21 @@ npm run dev -w client    # Vite on :5173 (proxies /api and /ws to server)
 ```
 
 The Vite dev server proxies `/api` and `/ws` requests to `http://localhost:3000`.
+
+### Dev Cheat: grant all materials
+
+To set **all materials (and money)** to `10000` for a user:
+
+```bash
+curl -X POST http://localhost:3000/api/dev/grant-materials \
+	-H 'Content-Type: application/json' \
+	-d '{"username":"YOUR_USERNAME","amount":10000}'
+```
+
+Notes:
+- Dev-only endpoint (returns `403` in production).
+- The user must have at least one admin outpost.
+- If the user is missing from live world state, log in once and retry.
 
 ## Production Deployment
 

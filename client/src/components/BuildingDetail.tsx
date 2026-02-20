@@ -4,10 +4,11 @@ import { submitCommand } from "../api/client.js";
 import {
   MATERIAL_TYPES, TRADEABLE_TYPES, BUILDING_DEFS, SUSPENSION_DESTROY_TICKS,
   totalInventory, outputBufferTotal, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER,
-  type MaterialType, type ResourceType, type AutoSellRule, type Building,
-  RESEARCH_TREE, type ResearchDef,
+  type MaterialType, type ResourceType, type AutoSellRule, type Building, parseMapKey,
+  RESEARCH_TREE, sectorName, type ResearchDef,
 } from "@mars-2035/shared";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
+import { LockIcon } from "./LockIcon.js";
 import { useIsMobile } from "../hooks/useIsMobile.js";
 import { BottomSheet } from "./BottomSheet.js";
 
@@ -21,6 +22,7 @@ const BUILDING_COLORS: Record<string, string> = {
   deep_freeze_synth: "#00363a", iceworld_refinery: "#002626",
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
+  quantum_relay: "#64b5f6",
 };
 
 const BUILDING_ICONS: Record<string, string> = {
@@ -33,10 +35,25 @@ const BUILDING_ICONS: Record<string, string> = {
   deep_freeze_synth: "❆", iceworld_refinery: "⬡",
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
+  quantum_relay: "⬢",
 };
+
+const RELAY_MATERIALS: MaterialType[] = MATERIAL_TYPES.filter((m) => m !== "money");
+
+function relayDestinationLabel(b: Building): string {
+  const { dx, dy, mx, my } = parseMapKey(b.map_key);
+  const sector = sectorName(dx, dy, mx, my);
+  return `${sector} (${mx},${my}) · ${b.location.x},${b.location.y}`;
+}
 
 function buildingLabel(b: Building): string {
   return `${DISPLAY_NAMES[b.class] ?? b.class} (${b.location.x},${b.location.y})`;
+}
+
+function adminOutpostDestinationLabel(b: Building): string {
+  const { dx, dy, mx, my } = parseMapKey(b.map_key);
+  const sector = sectorName(dx, dy, mx, my);
+  return `${sector} (${mx},${my})`;
 }
 
 export function BuildingDetail() {
@@ -57,6 +74,10 @@ export function BuildingDetail() {
   const [portMode, setPortMode] = useState<"sell" | "buy">("sell");
   const [buyResource, setBuyResource] = useState<ResourceType>(RESOURCE_TYPES[0]);
   const [buyAmount, setBuyAmount] = useState(1);
+  const [relayToBuildingId, setRelayToBuildingId] = useState("");
+  const [relayMaterials, setRelayMaterials] = useState<MaterialType[]>([]);
+  const [moneyTransferTargetMapKey, setMoneyTransferTargetMapKey] = useState("");
+  const [moneyTransferAmount, setMoneyTransferAmount] = useState(100);
 
   // Local auto-sell state
   const [localAutoSell, setLocalAutoSell] = useState<Partial<Record<ResourceType, AutoSellRule | null>>>({});
@@ -75,6 +96,8 @@ export function BuildingDetail() {
       trackedId.current = building?.entity_id ?? null;
       setLocalAutoSell({});
       setLocalBufferStock({});
+      setMoneyTransferTargetMapKey("");
+      setMoneyTransferAmount(100);
     }
   }, [building?.entity_id]);
 
@@ -102,10 +125,26 @@ export function BuildingDetail() {
 
   const closePanel = () => setSelectedTile(null);
   const def = BUILDING_DEFS[building.class];
-  const otherBuildings = buildings.filter(
+  const allOwnedBuildings = (player.buildings ?? buildings).filter(
+    (b) => b.owner_id === player.entity_id
+  );
+  const otherBuildings = allOwnedBuildings.filter(
     (b) => b.owner_id === player.entity_id && b.entity_id !== building.entity_id
   );
   const effectiveRoutes = building.outgoing_routes ?? [];
+  const relayRules = building.quantum_rules ?? [];
+  const relayTargets = allOwnedBuildings.filter(
+    (b) =>
+      b.owner_id === player.entity_id &&
+      b.class === "quantum_relay" &&
+      b.entity_id !== building.entity_id
+  );
+  const otherAdminOutposts = allOwnedBuildings.filter(
+    (b) =>
+      b.owner_id === player.entity_id &&
+      b.class === "admin_outpost" &&
+      b.entity_id !== building.entity_id
+  );
   const used = totalInventory(building.inventory);
   const pct = building.capacity > 0 ? Math.min(100, (used / building.capacity) * 100) : 0;
 
@@ -279,6 +318,99 @@ export function BuildingDetail() {
         )}
       </div>
 
+      {/* Quantum relay rules */}
+      {building.class === "quantum_relay" && (
+        <div className="bd-section">
+          <div className="bd-section-title">Quantum Rules (max 3)</div>
+
+          {relayRules.length === 0 ? (
+            <div className="route-hint">No quantum rules configured</div>
+          ) : (
+            relayRules.map((rule, idx) => {
+              const dest = relayTargets.find((b) => b.entity_id === rule.to_building_id)
+                ?? allOwnedBuildings.find((b) => b.entity_id === rule.to_building_id)
+                ?? null;
+              return (
+                <div key={`${rule.to_building_id}-${idx}`} className="route-item">
+                  <span className="route-res" style={{ color: "var(--accent)" }}>
+                    {rule.materials.join(", ")}
+                  </span>
+                  <span className="route-arrow">&rarr;</span>
+                  <span className="route-dest">{dest ? relayDestinationLabel(dest) : "???"}</span>
+                  <button
+                    className="route-delete"
+                    onClick={async () => {
+                      const res = await submitCommand("delete_quantum_rule", {
+                        building_id: building.entity_id,
+                        to_building_id: rule.to_building_id,
+                      });
+                      if (res.error) addNotification(`Delete failed: ${res.error}`, "error");
+                    }}
+                  >
+                    &times;
+                  </button>
+                </div>
+              );
+            })
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+            <select
+              className="input"
+              value={relayToBuildingId}
+              onChange={(e) => setRelayToBuildingId(e.target.value)}
+              style={{ fontSize: 12, padding: "2px 4px" }}
+            >
+              <option value="">Select destination relay</option>
+              {relayTargets.map((b) => (
+                <option key={b.entity_id} value={b.entity_id}>
+                  {relayDestinationLabel(b)}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {RELAY_MATERIALS.map((mat) => {
+                const selected = relayMaterials.includes(mat);
+                return (
+                  <button
+                    key={mat}
+                    type="button"
+                    className={`auto-sell-btn ${selected ? "active" : ""}`}
+                    onClick={() => {
+                      setRelayMaterials((prev) =>
+                        prev.includes(mat) ? prev.filter((m) => m !== mat) : [...prev, mat]
+                      );
+                    }}
+                  >
+                    {mat.replace(/_/g, " ")}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              className="btn btn-accent btn-sm"
+              disabled={!relayToBuildingId || relayMaterials.length === 0 || (relayRules.length >= 3 && !relayRules.some((r) => r.to_building_id === relayToBuildingId))}
+              onClick={async () => {
+                const res = await submitCommand("configure_quantum_rule", {
+                  building_id: building.entity_id,
+                  to_building_id: relayToBuildingId,
+                  materials: relayMaterials,
+                });
+                if (res.error) {
+                  addNotification(`Rule failed: ${res.error}`, "error");
+                } else {
+                  addNotification("Quantum rule saved", "success");
+                }
+              }}
+            >
+              Save Rule
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Buffer Stock */}
       {(() => {
         // Show buffer stock for materials present in inventory, output_buffer, or already having a buffer
@@ -336,6 +468,85 @@ export function BuildingDetail() {
           </div>
         );
       })()}
+
+      {/* Inter-map money transfer (admin outpost only) */}
+      {building.class === "admin_outpost" && (
+        <div className="bd-section">
+          <div className="bd-section-title">Send Money</div>
+          {otherAdminOutposts.length === 0 ? (
+            <div className="route-hint">Build another admin outpost to transfer between sectors</div>
+          ) : (() => {
+            const selectedMapKey =
+              moneyTransferTargetMapKey && otherAdminOutposts.some((b) => b.map_key === moneyTransferTargetMapKey)
+                ? moneyTransferTargetMapKey
+                : otherAdminOutposts[0].map_key;
+            const destination = otherAdminOutposts.find((b) => b.map_key === selectedMapKey) ?? null;
+            const sourceMoney = building.inventory.money ?? 0;
+            const amount = Number.isFinite(moneyTransferAmount)
+              ? Math.max(0.1, Math.round(moneyTransferAmount * 10) / 10)
+              : 0;
+            const canSend = !!destination && amount > 0 && sourceMoney >= amount;
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <select
+                  className="input"
+                  value={selectedMapKey}
+                  onChange={(e) => setMoneyTransferTargetMapKey(e.target.value)}
+                  style={{ fontSize: 12, padding: "2px 4px" }}
+                >
+                  {otherAdminOutposts.map((outpost) => (
+                    <option key={outpost.entity_id} value={outpost.map_key}>
+                      {adminOutpostDestinationLabel(outpost)}
+                    </option>
+                  ))}
+                </select>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    type="number"
+                    className="input"
+                    min="0.1"
+                    step="0.1"
+                    value={moneyTransferAmount}
+                    onChange={(e) => setMoneyTransferAmount(Number(e.target.value))}
+                    style={{ width: 90, fontSize: 12, padding: "2px 4px" }}
+                  />
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                    Available: <strong style={{ color: "var(--money)" }}>${sourceMoney.toFixed(1)}</strong>
+                  </span>
+                </div>
+
+                <button
+                  className="btn btn-accent btn-sm"
+                  disabled={!canSend}
+                  onClick={async () => {
+                    if (!destination) {
+                      addNotification("Select a destination sector", "error");
+                      return;
+                    }
+
+                    const res = await submitCommand("transfer", {
+                      from_building_id: building.entity_id,
+                      to_building_id: destination.entity_id,
+                      material: "money",
+                      amount,
+                    });
+
+                    if (res.error) {
+                      addNotification(`Send failed: ${res.error}`, "error");
+                    } else {
+                      addNotification(`Sent $${amount.toFixed(1)} to ${adminOutpostDestinationLabel(destination)}`, "success");
+                    }
+                  }}
+                >
+                  Send
+                </button>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Port buy/sell (port only) */}
       {building.class === "port" && (
@@ -498,7 +709,7 @@ export function BuildingDetail() {
                       <div className={`research-node ${completed ? "completed" : available ? "available" : "locked"}`}>
                         <div className="research-node-header">
                           <span className="research-status-icon">
-                            {completed ? "\u2713" : available ? "\u25C9" : "\uD83D\uDD12"}
+                              {completed ? "\u2713" : available ? "\u25C9" : <LockIcon />}
                           </span>
                           <span className="research-name">{res.name}</span>
                         </div>

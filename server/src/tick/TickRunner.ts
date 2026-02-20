@@ -4,6 +4,7 @@ import { updateMarketPrices } from "../systems/market.js";
 import { processCommands } from "./phases/01-commands.js";
 import { processProduction } from "./phases/02-production.js";
 import { processAutoSell } from "./phases/02b-autosell.js";
+import { processQuantumRelays } from "./phases/02c-quantum.js";
 import { processWorkers } from "./phases/02d-workers.js";
 import { processUpkeep } from "./phases/03-upkeep.js";
 import { processCommit } from "./phases/05-commit.js";
@@ -43,15 +44,17 @@ export class TickRunner {
     processCommands(this.store);
     // 3. Mines produce resources
     processProduction(this.store);
-    // 4. Deduct upkeep from admin outpost (before workers so status is settled)
+    // 4. Quantum relays instantly transfer resources between linked relays
+    processQuantumRelays(this.store);
+    // 5. Deduct upkeep from admin outpost (before workers so status is settled)
     processUpkeep(this.store);
-    // 5. Workers move resources along routes
+    // 6. Workers move resources along routes
     processWorkers(this.store);
-    // 6. Ports auto-sell resources at market price
+    // 7. Ports auto-sell resources at market price
     processAutoSell(this.store);
-    // 7. Advance tutorial progress
+    // 8. Advance tutorial progress
     processTutorial(this.store);
-    // 8. Broadcast events to WS clients
+    // 9. Broadcast events to WS clients
     processCommit(this.store);
 
     const elapsed = (performance.now() - t0).toFixed(1);

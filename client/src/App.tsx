@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useGameStore } from "./state/store.js";
 import { useMapSubscription } from "./hooks/useMapSubscription.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
@@ -17,13 +17,16 @@ import { WorkerListPanel } from "./components/WorkerListPanel.js";
 import { TileDetail } from "./components/TileDetail.js";
 import { MapSelector } from "./components/MapSelector.js";
 import { TutorialChecklist } from "./components/TutorialChecklist.js";
+import { SectorWelcomeModal } from "./components/SectorWelcomeModal.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
+  const currentMap = useGameStore((s) => s.currentMap);
   const setCurrentMap = useGameStore((s) => s.setCurrentMap);
   const player = useGameStore((s) => s.player);
   const setPlayer = useGameStore((s) => s.setPlayer);
   const world = useGameStore((s) => s.world);
+  const tiles = useGameStore((s) => s.tiles);
   const events = useGameStore((s) => s.events);
   const token = useGameStore((s) => s.token);
   const logout = useGameStore((s) => s.logout);
@@ -34,6 +37,10 @@ export function App() {
   const showBuildSheet = useGameStore((s) => s.showBuildSheet);
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
   const isMobile = useIsMobile();
+  const [showSectorWelcome, setShowSectorWelcome] = useState(false);
+
+  const prevPlayerIdRef = useRef<string | null>(null);
+  const prevMapAccountCountRef = useRef<number>(0);
 
   // Connect to map via WS
   useMapSubscription();
@@ -59,6 +66,32 @@ export function App() {
     if (!player || !token) return;
     fetchPlayer(player.entity_id).then(setPlayer).catch(() => {});
   }, [events]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!player) {
+      prevPlayerIdRef.current = null;
+      prevMapAccountCountRef.current = 0;
+      setShowSectorWelcome(false);
+      return;
+    }
+
+    const mapAccountCount = Object.keys(player.map_accounts ?? {}).length;
+    const isIntroState = player.tutorial_step === 1 && mapAccountCount === 0;
+    const samePlayer = prevPlayerIdRef.current === player.entity_id;
+    const switchedPlayer = prevPlayerIdRef.current !== player.entity_id;
+    const justForfeited =
+      samePlayer &&
+      prevMapAccountCountRef.current > 0 &&
+      mapAccountCount === 0 &&
+      player.tutorial_step === 1;
+
+    if (isIntroState && (switchedPlayer || justForfeited)) {
+      setShowSectorWelcome(true);
+    }
+
+    prevPlayerIdRef.current = player.entity_id;
+    prevMapAccountCountRef.current = mapAccountCount;
+  }, [player]);
 
   if (!world) {
     return (
@@ -101,6 +134,14 @@ export function App() {
       )}
       <Notifications />
       {showMapSelector && <MapSelector />}
+      {showSectorWelcome && world && currentMap && (
+        <SectorWelcomeModal
+          world={world}
+          currentMap={currentMap}
+          tiles={tiles}
+          onClose={() => setShowSectorWelcome(false)}
+        />
+      )}
     </div>
   );
 }
