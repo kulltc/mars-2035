@@ -5,13 +5,22 @@ import { submitCommand } from "../api/client.js";
 const STEPS = [
   "Build an admin outpost",
   "Build a mine",
-  "Build a trading outpost & set a route by holding and dragging from mine to port)",
+  "Build a trading outpost & set a route by holding and dragging from mine to trading outpost",
   "Sell at least 1 unit of material",
   "Ship money from port back to outpost",
 ];
 
 export function TutorialChecklist() {
+  const player = useGameStore((s) => s.player);
+  const setPlayer = useGameStore((s) => s.setPlayer);
   const tutorialStep = useGameStore((s) => s.player?.tutorial_step);
+
+  function handleDismissTutorial() {
+    if (player) {
+      setPlayer({ ...player, tutorial_step: undefined });
+    }
+    void submitCommand("dismiss_tutorial", {});
+  }
 
   if (tutorialStep === undefined) return null;
 
@@ -23,11 +32,12 @@ export function TutorialChecklist() {
           <div className="tutorial-congrats-title">Well done!</div>
           <p className="tutorial-congrats-text">
             You've completed your first cash cycle. Money is now flowing from
-            mine → port → outpost. Keep expanding!
+            mine → port → outpost. Keep expanding, but don't run out of cash! 
+            Every building and worker costs upkeep, make sure they're worth it.
           </p>
           <button
             className="btn btn-accent"
-            onClick={() => submitCommand("dismiss_tutorial", {})}
+            onClick={handleDismissTutorial}
           >
             Got it!
           </button>

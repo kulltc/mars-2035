@@ -1,4 +1,3 @@
-import { STARTING_MONEY } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 
 export function processTutorial(store: WorldStore) {
@@ -59,15 +58,7 @@ export function processTutorial(store: WorldStore) {
         break;
       }
       case 5: {
-        // Advance when admin outpost money > STARTING_MONEY
-        for (const account of Object.values(player.map_accounts)) {
-          if (!account.admin_outpost_building_id) continue;
-          const admin = store.buildings.get(account.admin_outpost_building_id);
-          if (admin && (admin.inventory.money ?? 0) > STARTING_MONEY) {
-            player.tutorial_step = 6;
-            break;
-          }
-        }
+        // Advanced by explicit money-shipping actions in command/worker phases.
         break;
       }
     }

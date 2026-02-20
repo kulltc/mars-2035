@@ -163,6 +163,14 @@ export function processWorkers(store: WorldStore) {
         if (amount > 0) {
           worker.inventory[res] = (worker.inventory[res] ?? 0) - amount;
           dest.inventory[res] = (dest.inventory[res] ?? 0) + amount;
+
+          if (res === "money" && dest.class === "admin_outpost") {
+            const player = store.players.get(worker.owner_id);
+            if (player?.tutorial_step === 5) {
+              player.tutorial_step = 6;
+            }
+          }
+
           store.pushEvent("worker_dropoff", {
             worker_id: worker.entity_id,
             building_id: dest.entity_id,
@@ -226,12 +234,21 @@ export function processWorkers(store: WorldStore) {
 
         // Dump all inventory into admin outpost (always accept — it's home base)
         let totalDumped = 0;
+        let moneyDumped = 0;
         for (const key of Object.keys(worker.inventory) as MaterialType[]) {
           const amount = worker.inventory[key] ?? 0;
           if (amount <= 0) continue;
           worker.inventory[key] = 0;
           outpost.inventory[key] = (outpost.inventory[key] ?? 0) + amount;
+          if (key === "money") moneyDumped += amount;
           totalDumped += amount;
+        }
+
+        if (moneyDumped > 0) {
+          const player = store.players.get(worker.owner_id);
+          if (player?.tutorial_step === 5) {
+            player.tutorial_step = 6;
+          }
         }
 
         if (totalDumped > 0) {

@@ -27,6 +27,7 @@ const RAW_MATS = [
 
 export function TopBar() {
   const player = useGameStore((s) => s.player);
+  const setPlayer = useGameStore((s) => s.setPlayer);
   const buildings = useGameStore((s) => s.buildings);
   const currentMap = useGameStore((s) => s.currentMap);
   const toggleMarket = useGameStore((s) => s.toggleMarket);
@@ -111,6 +112,14 @@ export function TopBar() {
               if (res.error) {
                 addNotification(`Forfeit failed: ${res.error}`, "error");
               } else {
+                if (player) {
+                  setPlayer({
+                    ...player,
+                    tutorial_step: 1,
+                    map_accounts: {},
+                    research: [],
+                  });
+                }
                 addNotification("Game forfeited. You can place a new admin outpost to start over.", "warning");
               }
             }}

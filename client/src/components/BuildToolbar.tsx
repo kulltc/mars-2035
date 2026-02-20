@@ -11,16 +11,16 @@ import { useIsMobile } from "../hooks/useIsMobile.js";
 import { BottomSheet } from "./BottomSheet.js";
 
 const BUILDING_ICONS: Record<string, string> = {
-  admin_outpost: "\u2302", infra_tower: "\u25E3", research_lab: "\u2697", research_station: "\u2609",
-  mine: "\u26CF", port: "\u2693",
-  smelter: "S", magnetic_press: "M", morphic_forge: "F",
-  servo_assembly: "V", replication_chamber: "R",
-  polymer_kiln: "K", crystal_grower: "G", toroidin_foundry: "T",
-  muphrid_lab: "L", solar_loom: "W",
-  cryo_distillery: "D", phase_condenser: "P", xenotherm_reactor: "X",
-  deep_freeze_synth: "Z", iceworld_refinery: "I",
-  resonance_tuner: "N", neural_loom: "E", psychophysical_amp: "A",
-  dampening_forge: "H", consciousness_engine: "C",
+  admin_outpost: "⌂", infra_tower: "△", research_lab: "⚗", research_station: "◉",
+  mine: "⛏", port: "$",
+  smelter: "♨", magnetic_press: "⌬", morphic_forge: "⚒",
+  servo_assembly: "⚙", replication_chamber: "⧉",
+  polymer_kiln: "◌", crystal_grower: "✧", toroidin_foundry: "⊚",
+  muphrid_lab: "⚛", solar_loom: "☼",
+  cryo_distillery: "❄", phase_condenser: "◈", xenotherm_reactor: "☢",
+  deep_freeze_synth: "❆", iceworld_refinery: "⬡",
+  resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
+  dampening_forge: "⊟", consciousness_engine: "◎",
 };
 
 const BUILDING_COLORS: Record<string, string> = {

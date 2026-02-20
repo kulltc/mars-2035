@@ -111,6 +111,16 @@ function handleTransfer(store: WorldStore, player: Player, data: Record<string, 
   }
   to.inventory[material] = (to.inventory[material] ?? 0) + actual;
 
+  if (
+    material === "money" &&
+    actual > 0 &&
+    from.class === "port" &&
+    to.class === "admin_outpost" &&
+    player.tutorial_step === 5
+  ) {
+    player.tutorial_step = 6;
+  }
+
   return {
     ok: true,
     events: [{
