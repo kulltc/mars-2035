@@ -22,7 +22,7 @@ export const TILES_PER_MAP = 300;
 
 // ── Tick ──
 
-export const TICK_INTERVAL_MS = 500; // 5s for dev
+export const TICK_INTERVAL_MS = 1000; // 5s for dev
 
 // ── Building definitions ──
 
