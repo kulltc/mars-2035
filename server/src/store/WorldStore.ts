@@ -27,6 +27,7 @@ import {
   tileKey,
 } from "@mars-2035/shared";
 import { generateWorld } from "../seed/worldGen.js";
+import { applyResearchEffects } from "../systems/building.js";
 import type { WorldSnapshotPayload } from "../db.js";
 
 export class WorldStore {
@@ -287,6 +288,13 @@ export class WorldStore {
       if (!building.capacity) {
         building.capacity = BUILDING_DEFS[building.class].capacity;
         console.log(`Migration: set capacity ${building.capacity} on ${building.entity_id} (${building.class})`);
+      }
+    }
+
+    // Recalculate building/worker capacities based on unlocked research
+    for (const player of store.players.values()) {
+      if (player.research.length > 0) {
+        applyResearchEffects(store, player);
       }
     }
 

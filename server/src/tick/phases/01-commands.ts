@@ -15,7 +15,7 @@ import type {
 } from "@mars-2035/shared";
 import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey, RESEARCH_TREE } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
-import { placeBuilding, spawnWorker } from "../../systems/building.js";
+import { placeBuilding, spawnWorker, applyResearchEffects } from "../../systems/building.js";
 
 // ── Handler result type ──
 
@@ -501,6 +501,11 @@ function handleDoResearch(store: WorldStore, player: Player, data: Record<string
   }
 
   player.research.push(research_id);
+
+  // Retroactively apply capacity bonuses to existing buildings/workers
+  if (def.effect) {
+    applyResearchEffects(store, player);
+  }
 
   return {
     ok: true,

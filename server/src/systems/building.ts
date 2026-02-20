@@ -224,3 +224,22 @@ export function placeBuilding(
 
   return { ok: true, building };
 }
+
+/** Recalculate capacities on existing buildings/workers based on player research */
+export function applyResearchEffects(store: WorldStore, player: Player) {
+  if (player.research.includes("storage_buildings")) {
+    const mult = RESEARCH_TREE.storage_buildings.effect!.multiplier;
+    for (const b of store.buildings.values()) {
+      if (b.owner_id !== player.entity_id) continue;
+      const base = BUILDING_DEFS[b.class].capacity;
+      b.capacity = Math.round(base * mult);
+    }
+  }
+  if (player.research.includes("storage_workers")) {
+    const mult = RESEARCH_TREE.storage_workers.effect!.multiplier;
+    for (const w of store.workers.values()) {
+      if (w.owner_id !== player.entity_id) continue;
+      w.capacity = Math.round(WORKER_CAPACITY * mult);
+    }
+  }
+}
