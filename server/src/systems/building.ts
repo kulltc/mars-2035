@@ -75,7 +75,7 @@ export function placeBuilding(
   if (buildingClass === "admin_outpost") {
     const hasAnyOutpost = Object.values(player.map_accounts).some(a => a.admin_outpost_building_id);
     if (hasAnyOutpost && !player.research.includes("unlock_new_map")) {
-      return { ok: false, error: "Research 'Colonial Expansion' required to expand to new maps" };
+      return { ok: false, error: "Research 'Planetary Expansion' required to expand to new maps" };
     }
   }
 

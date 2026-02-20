@@ -7,6 +7,7 @@ import { processAutoSell } from "./phases/02b-autosell.js";
 import { processWorkers } from "./phases/02d-workers.js";
 import { processUpkeep } from "./phases/03-upkeep.js";
 import { processCommit } from "./phases/05-commit.js";
+import { processTutorial } from "./phases/06-tutorial.js";
 import { saveSnapshot } from "../db.js";
 
 export class TickRunner {
@@ -48,7 +49,9 @@ export class TickRunner {
     processWorkers(this.store);
     // 6. Ports auto-sell resources at market price
     processAutoSell(this.store);
-    // 7. Broadcast events to WS clients
+    // 7. Advance tutorial progress
+    processTutorial(this.store);
+    // 8. Broadcast events to WS clients
     processCommit(this.store);
 
     const elapsed = (performance.now() - t0).toFixed(1);

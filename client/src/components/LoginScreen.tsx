@@ -34,7 +34,7 @@ export function LoginScreen() {
   return (
     <div className="login-screen">
       <div className="login-title">MARS 2035</div>
-      <div className="login-subtitle">Colony Management Simulator</div>
+      <div className="login-subtitle">Mars Settlement Management Simulator</div>
       <div className="login-box">
         <div className="login-toggle">
           <button

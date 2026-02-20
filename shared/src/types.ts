@@ -217,6 +217,7 @@ export interface Player {
   status: PlayerStatus;
   map_accounts: Record<MapKey, MapAccount>;
   research: string[];
+  tutorial_step?: number;
 }
 
 // ── Events ──
@@ -270,7 +271,8 @@ export type CommandType =
   | "do_research"
   | "set_buffer_stock"
   | "import"
-  | "forfeit";
+  | "forfeit"
+  | "dismiss_tutorial";
 
 export interface Command {
   id: string;

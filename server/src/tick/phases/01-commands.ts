@@ -634,6 +634,7 @@ function handleForfeit(store: WorldStore, player: Player, _data: Record<string, 
   // Reset player state
   player.map_accounts = {};
   player.research = [];
+  player.tutorial_step = 1;
 
   return {
     ok: true,
@@ -642,6 +643,11 @@ function handleForfeit(store: WorldStore, player: Player, _data: Record<string, 
       data: { player_id: playerId, name: player.name, forfeit: true },
     }],
   };
+}
+
+function handleDismissTutorial(_store: WorldStore, player: Player, _data: Record<string, unknown>): HandlerResult {
+  player.tutorial_step = undefined;
+  return { ok: true, events: [] };
 }
 
 // ── Handler registry ──
@@ -661,6 +667,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   do_research: handleDoResearch,
   set_buffer_stock: handleSetBufferStock,
   forfeit: handleForfeit,
+  dismiss_tutorial: handleDismissTutorial,
 };
 
 // ── Main processor ──

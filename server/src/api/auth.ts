@@ -17,6 +17,7 @@ function createPlayer(store: WorldStore, playerName: string, playerId: string): 
     status: "active",
     map_accounts: {},
     research: [],
+    tutorial_step: 1,
   };
   store.players.set(playerId, player);
 

@@ -316,6 +316,20 @@
   }
 }
 
+@media (max-width: 768px) {
+  /* Tutorial checklist: compact, above FAB */
+  .tutorial-checklist {
+    bottom: 84px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+  }
+
+  .tutorial-step {
+    font-size: 11px;
+  }
+}
+
 /* ── Phone-only breakpoint (<=480px) ── */
 
 @media (max-width: 480px) {

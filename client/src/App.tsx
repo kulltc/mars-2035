@@ -16,6 +16,7 @@ import { MarketPanel } from "./components/MarketPanel.js";
 import { WorkerListPanel } from "./components/WorkerListPanel.js";
 import { TileDetail } from "./components/TileDetail.js";
 import { MapSelector } from "./components/MapSelector.js";
+import { TutorialChecklist } from "./components/TutorialChecklist.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -82,6 +83,7 @@ export function App() {
         <WorkerDetail />
         <ResourcePicker />
         {showMarket && <MarketPanel />}
+        <TutorialChecklist />
       </div>
       {isMobile ? (
         <>

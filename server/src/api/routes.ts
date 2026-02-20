@@ -23,6 +23,7 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "set_buffer_stock",
   "import",
   "forfeit",
+  "dismiss_tutorial",
 ]);
 
 let commandCounter = 0;

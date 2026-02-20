@@ -99,6 +99,10 @@ export async function fetchEvents(mapKey: string, sinceSeq = 0): Promise<GameEve
   return res.json();
 }
 
+export function dismissTutorial() {
+  return submitCommand("dismiss_tutorial", {});
+}
+
 export function connectMapWS(
   dx: number, dy: number, mx: number, my: number,
   onMessage: (data: unknown) => void
