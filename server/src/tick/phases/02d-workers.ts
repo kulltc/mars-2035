@@ -129,8 +129,9 @@ export function processWorkers(store: WorldStore) {
           break;
         }
 
-        // Create deduplicated dropoff task
-        const dropoffTask = findOrCreateDropoffTask(store, worker.owner_id, worker.map_key, task.to_building_id, res);
+        // Create a per-worker dropoff task (not shared — shared tasks get
+        // deleted when the first worker finishes, stranding others)
+        const dropoffTask = createDropoffTask(store, worker.owner_id, worker.map_key, task.to_building_id, res);
         worker.current_task_id = dropoffTask.id;
         worker.state = "moving_to_dropoff";
         break;
@@ -262,15 +263,13 @@ function generatePickupTasks(store: WorldStore) {
       const buffer = building.buffer_stock?.[route.resource] ?? 0;
       if (available - buffer <= 0) continue;
 
+      // Only skip if an unclaimed pickup task is already pending in the queue
       const exists = taskExists(store, "pickup", (t: PickupTask) =>
         t.from_building_id === building.entity_id &&
         t.to_building_id === route.to_building_id &&
         t.resource === route.resource
       );
       if (exists) continue;
-
-      const workerHasIt = workerHasPickup(store, building.entity_id, route.to_building_id, route.resource);
-      if (workerHasIt) continue;
 
       const taskId = `task_${++store.taskCounter}`;
       const task: PickupTask = {
@@ -324,31 +323,16 @@ function generateConstructTasks(store: WorldStore) {
   }
 }
 
+/** Check if an unclaimed task matching the predicate exists in the queue. */
 function taskExists<T extends WorkerTask>(store: WorldStore, type: T["type"], pred: (t: T) => boolean): boolean {
   for (const task of store.taskQueue.values()) {
-    if (task.type === type && pred(task as T)) return true;
+    if (task.type === type && pred(task as T) && !isTaskClaimed(store, task.id)) return true;
   }
   return false;
 }
 
-function workerHasPickup(store: WorldStore, fromId: string, toId: string, resource: MaterialType): boolean {
-  for (const worker of store.workers.values()) {
-    if (!worker.current_task_id) continue;
-    const task = store.taskQueue.get(worker.current_task_id);
-    if (!task || task.type !== "pickup") continue;
-    const pt = task as PickupTask;
-    if (pt.from_building_id === fromId && pt.to_building_id === toId && pt.resource === resource) return true;
-  }
-  return false;
-}
 
-function findOrCreateDropoffTask(store: WorldStore, ownerId: string, mapKey: string, buildingId: string, resource: MaterialType): DropoffTask {
-  for (const task of store.taskQueue.values()) {
-    if (task.type === "dropoff" && task.building_id === buildingId && task.resource === resource) {
-      return task as DropoffTask;
-    }
-  }
-
+function createDropoffTask(store: WorldStore, ownerId: string, mapKey: string, buildingId: string, resource: MaterialType): DropoffTask {
   const taskId = `task_${++store.taskCounter}`;
   const task: DropoffTask = {
     id: taskId,
