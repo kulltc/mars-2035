@@ -127,6 +127,14 @@ export interface GameState {
   // ── Camera target (for locate-worker) ──
   cameraTarget: { x: number; y: number } | null;
   setCameraTarget: (target: { x: number; y: number } | null) => void;
+
+  // ── Mobile UI ──
+  showBuildSheet: boolean;
+  toggleBuildSheet: () => void;
+  showMainMenu: boolean;
+  toggleMainMenu: () => void;
+  showInventory: boolean;
+  toggleInventory: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -267,4 +275,12 @@ export const useGameStore = create<GameState>((set) => ({
   // ── Camera target ──
   cameraTarget: null,
   setCameraTarget: (cameraTarget) => set({ cameraTarget }),
+
+  // ── Mobile UI ──
+  showBuildSheet: false,
+  toggleBuildSheet: () => set((state) => ({ showBuildSheet: !state.showBuildSheet })),
+  showMainMenu: false,
+  toggleMainMenu: () => set((state) => ({ showMainMenu: !state.showMainMenu })),
+  showInventory: false,
+  toggleInventory: () => set((state) => ({ showInventory: !state.showInventory })),
 }));

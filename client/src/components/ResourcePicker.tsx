@@ -3,6 +3,8 @@ import { useGameStore } from "../state/store.js";
 import { MATERIAL_TYPES, type MaterialType } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
+import { useIsMobile } from "../hooks/useIsMobile.js";
+import { BottomSheet } from "./BottomSheet.js";
 
 const ROUTE_DOT_COLORS: Record<string, string> = {
   money: "#ffd54f",
@@ -18,6 +20,7 @@ const ROUTE_DOT_COLORS: Record<string, string> = {
 };
 
 export function ResourcePicker() {
+  const isMobile = useIsMobile();
   const routePickerTarget = useGameStore((s) => s.routePickerTarget);
   const setRoutePickerTarget = useGameStore((s) => s.setRoutePickerTarget);
   const buildings = useGameStore((s) => s.buildings);
@@ -77,11 +80,11 @@ export function ResourcePicker() {
     }
   };
 
-  return (
+  const pickerContent = (
     <div
       ref={ref}
-      className="resource-picker"
-      style={{
+      className={isMobile ? "resource-picker mobile" : "resource-picker"}
+      style={isMobile ? undefined : {
         left: routePickerTarget.screenX + 8,
         top: routePickerTarget.screenY - 8,
       }}
@@ -99,4 +102,9 @@ export function ResourcePicker() {
       ))}
     </div>
   );
+
+  if (isMobile) {
+    return <BottomSheet onClose={() => setRoutePickerTarget(null)}>{pickerContent}</BottomSheet>;
+  }
+  return pickerContent;
 }

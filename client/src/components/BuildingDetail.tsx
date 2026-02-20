@@ -8,6 +8,8 @@ import {
   RESEARCH_TREE, type ResearchDef,
 } from "@mars-2035/shared";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
+import { useIsMobile } from "../hooks/useIsMobile.js";
+import { BottomSheet } from "./BottomSheet.js";
 
 const BUILDING_COLORS: Record<string, string> = {
   admin_outpost: "#4fc3f7", research_lab: "#7e57c2", mine: "#ffb74d", port: "#81c784",
@@ -38,6 +40,7 @@ function buildingLabel(b: Building): string {
 }
 
 export function BuildingDetail() {
+  const isMobile = useIsMobile();
   const selectedTile = useGameStore((s) => s.selectedTile);
   const buildings = useGameStore((s) => s.buildings);
   const player = useGameStore((s) => s.player);
@@ -92,6 +95,7 @@ export function BuildingDetail() {
 
   if (!building || !player) return null;
 
+  const closePanel = () => setSelectedTile(null);
   const def = BUILDING_DEFS[building.class];
   const otherBuildings = buildings.filter(
     (b) => b.owner_id === player.entity_id && b.entity_id !== building.entity_id
@@ -135,8 +139,8 @@ export function BuildingDetail() {
     });
   };
 
-  return (
-    <div className="building-detail">
+  const content = (
+    <div className={isMobile ? "building-detail mobile" : "building-detail"}>
       {/* Header */}
       <div className="bd-header">
         <div
@@ -468,4 +472,9 @@ export function BuildingDetail() {
       )}
     </div>
   );
+
+  if (isMobile) {
+    return <BottomSheet onClose={closePanel} maxHeight="70vh">{content}</BottomSheet>;
+  }
+  return content;
 }

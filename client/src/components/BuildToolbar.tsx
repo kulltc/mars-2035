@@ -7,6 +7,8 @@ import {
 } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
+import { useIsMobile } from "../hooks/useIsMobile.js";
+import { BottomSheet } from "./BottomSheet.js";
 
 const BUILDING_ICONS: Record<string, string> = {
   admin_outpost: "\u2302", infra_tower: "\u25E3", research_lab: "\u2697", research_station: "\u2609",
@@ -76,6 +78,7 @@ function formatCost(cls: BuildingClass): string {
 }
 
 export function BuildToolbar() {
+  const isMobile = useIsMobile();
   const player = useGameStore((s) => s.player);
   const buildings = useGameStore((s) => s.buildings);
   const workers = useGameStore((s) => s.workers);
@@ -83,6 +86,8 @@ export function BuildToolbar() {
   const setBuildMode = useGameStore((s) => s.setBuildMode);
   const currentMap = useGameStore((s) => s.currentMap);
   const addNotification = useGameStore((s) => s.addNotification);
+  const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
+  const toggleWorkers = useGameStore((s) => s.toggleWorkers);
 
   const [activeTab, setActiveTab] = useState(0);
 
@@ -101,8 +106,8 @@ export function BuildToolbar() {
 
   const section = BUILD_SECTIONS[activeTab];
 
-  return (
-    <div className="build-toolbar">
+  const content = (
+    <div className={isMobile ? "build-toolbar mobile" : "build-toolbar"}>
       {/* Tabs */}
       <div className="build-toolbar-tabs">
         {BUILD_SECTIONS.map((s, i) => (
@@ -142,7 +147,11 @@ export function BuildToolbar() {
             <div
               key={cls}
               className={`build-card ${isSelected ? "selected" : ""} ${disabled ? "disabled" : ""}`}
-              onClick={() => !disabled && setBuildMode(isSelected ? null : cls)}
+              onClick={() => {
+                if (disabled) return;
+                setBuildMode(isSelected ? null : cls);
+                if (!isSelected && isMobile) toggleBuildSheet();
+              }}
               title={title}
             >
               <span className="bc-icon" style={{ color: researchLocked ? "#555" : (BUILDING_COLORS[cls] ?? "#888") }}>
@@ -157,8 +166,14 @@ export function BuildToolbar() {
 
       {/* Workers section */}
       <div className="build-toolbar-extra">
-        <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-          Workers: <strong style={{ color: "var(--text-primary)" }}>{myWorkerCount}</strong>
+        <div
+          className="resource-pill"
+          style={{ cursor: "pointer" }}
+          onClick={toggleWorkers}
+          title="View worker list"
+        >
+          <span className="label" style={{ color: "var(--accent)" }}>W</span>
+          <span className="value">{myWorkerCount}</span>
         </div>
         {hasAdminOutpost && (
           <button
@@ -182,4 +197,9 @@ export function BuildToolbar() {
       </div>
     </div>
   );
+
+  if (isMobile) {
+    return <BottomSheet onClose={toggleBuildSheet} maxHeight="55vh">{content}</BottomSheet>;
+  }
+  return content;
 }

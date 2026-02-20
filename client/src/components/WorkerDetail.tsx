@@ -6,6 +6,8 @@ import {
   type MaterialType, type WorkerState, type WorkerFilter, type WorkerTaskType,
 } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
+import { useIsMobile } from "../hooks/useIsMobile.js";
+import { BottomSheet } from "./BottomSheet.js";
 
 const ALL_MATERIALS: MaterialType[] = [...MATERIAL_TYPES];
 
@@ -32,6 +34,7 @@ const STATE_LABELS: Record<WorkerState, string> = {
 };
 
 export function WorkerDetail() {
+  const isMobile = useIsMobile();
   const selectedWorkerId = useGameStore((s) => s.selectedWorkerId);
   const setSelectedWorkerId = useGameStore((s) => s.setSelectedWorkerId);
   const workers = useGameStore((s) => s.workers);
@@ -118,8 +121,8 @@ export function WorkerDetail() {
   const allChecked = !filter?.resources;
   const noneChecked = filter?.resources?.length === 0;
 
-  return (
-    <div className="worker-detail" style={{ bottom: 8, right: 8 }}>
+  const content = (
+    <div className={isMobile ? "worker-detail mobile" : "worker-detail"} style={isMobile ? undefined : { bottom: 8, right: 8 }}>
       <div className="wd-header">
         <div>
           <strong>Worker</strong>
@@ -268,4 +271,9 @@ export function WorkerDetail() {
       </div>
     </div>
   );
+
+  if (isMobile) {
+    return <BottomSheet onClose={() => setSelectedWorkerId(null)} maxHeight="70vh">{content}</BottomSheet>;
+  }
+  return content;
 }

@@ -1,5 +1,7 @@
 import React from "react";
 import { useGameStore } from "../state/store.js";
+import { useIsMobile } from "../hooks/useIsMobile.js";
+import { BottomSheet } from "./BottomSheet.js";
 
 const RESOURCE_COLORS: Record<string, string> = {
   steel: "#3d4a55",
@@ -25,6 +27,7 @@ function qualityLabel(richness: number): string {
 }
 
 export function TileDetail() {
+  const isMobile = useIsMobile();
   const selectedTile = useGameStore((s) => s.selectedTile);
   const tiles = useGameStore((s) => s.tiles);
   const buildings = useGameStore((s) => s.buildings);
@@ -47,8 +50,8 @@ export function TileDetail() {
   const color = RESOURCE_COLORS[resType] ?? "#555";
   const name = RESOURCE_NAMES[resType] ?? resType;
 
-  return (
-    <div className="tile-detail">
+  const content = (
+    <div className={isMobile ? "tile-detail mobile" : "tile-detail"}>
       <div className="td-header">
         <span className="td-dot" style={{ background: color }} />
         <div>
@@ -74,4 +77,9 @@ export function TileDetail() {
       </div>
     </div>
   );
+
+  if (isMobile) {
+    return <BottomSheet onClose={() => setSelectedTile(null)}>{content}</BottomSheet>;
+  }
+  return content;
 }

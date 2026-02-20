@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore } from "../state/store.js";
+import { useIsMobile } from "../hooks/useIsMobile.js";
 import {
   TICK_INTERVAL_MS, TILES_PER_MAP,
   totalInventory, BUILDING_DEFS, TERRITORY_RADIUS,
@@ -102,6 +103,17 @@ type MouseAction =
   | { type: "panning"; startX: number; startY: number; startCamX: number; startCamY: number }
   | { type: "routing"; fromBuildingId: string }
   | { type: "area"; startTileX: number; startTileY: number };
+
+// ── Touch state machine ──
+
+type TouchMode =
+  | "idle"
+  | "potential-tap"
+  | "panning"
+  | "pinching"
+  | "long-press"
+  | "routing"
+  | "area";
 
 export function MapCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -762,7 +774,6 @@ export function MapCanvas() {
           }).then((res) => {
             if (res.error) {
               state.addNotification(`Build failed: ${res.error}`, "error");
-              // Remove pending building
               useGameStore.setState((s) => ({
                 pendingBuildings: s.pendingBuildings.filter(
                   (pb) => !(pb.x === tile.x && pb.y === tile.y)
@@ -901,8 +912,269 @@ export function MapCanvas() {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
+  // ── Touch handlers ──
+
+  const touchModeRef = useRef<TouchMode>("idle");
+  const touchStartRef = useRef<{ x: number; y: number; time: number }>({ x: 0, y: 0, time: 0 });
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const pinchStartDistRef = useRef(0);
+  const pinchStartZoomRef = useRef(1);
+  const pinchMidRef = useRef({ x: 0, y: 0 });
+  const TOUCH_DRAG_THRESHOLD = 10;
+  const LONG_PRESS_MS = 500;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const getOffset = (t: Touch) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    };
+
+    const pinchDist = (t1: Touch, t2: Touch) =>
+      Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const touches = e.touches;
+
+      if (touches.length === 2) {
+        // Start pinch
+        clearTimeout(longPressTimerRef.current);
+        touchModeRef.current = "pinching";
+        pinchStartDistRef.current = pinchDist(touches[0], touches[1]);
+        pinchStartZoomRef.current = cameraRef.current.zoom;
+        const rect = canvas.getBoundingClientRect();
+        pinchMidRef.current = {
+          x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left,
+          y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top,
+        };
+        return;
+      }
+
+      if (touches.length === 1) {
+        const pos = getOffset(touches[0]);
+        touchStartRef.current = { x: pos.x, y: pos.y, time: Date.now() };
+        touchModeRef.current = "potential-tap";
+
+        const state = storeRef.current;
+
+        // Area draw mode
+        if (state.areaDrawMode) {
+          const tile = screenToTile(pos.x, pos.y);
+          mouseActionRef.current = { type: "area", startTileX: tile.x, startTileY: tile.y };
+          routeDragEndRef.current = { x: pos.x, y: pos.y };
+          touchModeRef.current = "area";
+          return;
+        }
+
+        // Long press timer for route drag
+        const building = getBuildingAt(pos.x, pos.y);
+        const onOwn = building && building.owner_id === state.player?.entity_id;
+
+        longPressTimerRef.current = setTimeout(() => {
+          if (touchModeRef.current !== "potential-tap") return;
+          if (onOwn && building && !state.buildMode) {
+            touchModeRef.current = "routing";
+            mouseActionRef.current = { type: "routing", fromBuildingId: building.entity_id };
+            routeDragEndRef.current = { x: pos.x, y: pos.y };
+            // Haptic feedback if available
+            if (navigator.vibrate) navigator.vibrate(30);
+          } else {
+            touchModeRef.current = "long-press";
+          }
+        }, LONG_PRESS_MS);
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const touches = e.touches;
+
+      if (touchModeRef.current === "pinching" && touches.length >= 2) {
+        const newDist = pinchDist(touches[0], touches[1]);
+        const scale = newDist / pinchStartDistRef.current;
+        const cam = cameraRef.current;
+        const mid = pinchMidRef.current;
+        const oldTs = BASE_TILE * cam.zoom;
+        const worldX = mid.x / oldTs + cam.x;
+        const worldY = mid.y / oldTs + cam.y;
+        cam.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchStartZoomRef.current * scale));
+        const newTs = BASE_TILE * cam.zoom;
+        cam.x = worldX - mid.x / newTs;
+        cam.y = worldY - mid.y / newTs;
+        return;
+      }
+
+      if (touches.length !== 1) return;
+      const pos = getOffset(touches[0]);
+
+      if (touchModeRef.current === "routing") {
+        routeDragEndRef.current = { x: pos.x, y: pos.y };
+        return;
+      }
+
+      if (touchModeRef.current === "area") {
+        routeDragEndRef.current = { x: pos.x, y: pos.y };
+        return;
+      }
+
+      if (touchModeRef.current === "potential-tap") {
+        const dist = Math.hypot(pos.x - touchStartRef.current.x, pos.y - touchStartRef.current.y);
+        if (dist > TOUCH_DRAG_THRESHOLD) {
+          clearTimeout(longPressTimerRef.current);
+          touchModeRef.current = "panning";
+        } else {
+          return;
+        }
+      }
+
+      if (touchModeRef.current === "panning") {
+        const ts = BASE_TILE * cameraRef.current.zoom;
+        const dx = pos.x - touchStartRef.current.x;
+        const dy = pos.y - touchStartRef.current.y;
+        cameraRef.current.x -= dx / ts;
+        cameraRef.current.y -= dy / ts;
+        touchStartRef.current.x = pos.x;
+        touchStartRef.current.y = pos.y;
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      clearTimeout(longPressTimerRef.current);
+      const mode = touchModeRef.current;
+
+      if (mode === "potential-tap" || mode === "long-press") {
+        // Tap — select or place
+        const pos = touchStartRef.current;
+        const state = storeRef.current;
+
+        if (state.buildMode && state.player && state.currentMap) {
+          const tile = screenToTile(pos.x, pos.y);
+          if (tile.x >= 0 && tile.y >= 0 && tile.x < TILES_PER_MAP && tile.y < TILES_PER_MAP) {
+            state.addPendingBuilding({
+              buildingClass: state.buildMode as BuildingClass,
+              x: tile.x, y: tile.y,
+            });
+            submitCommand("place_building", {
+              building_class: state.buildMode,
+              location: {
+                dx: state.currentMap.dx, dy: state.currentMap.dy,
+                mx: state.currentMap.mx, my: state.currentMap.my,
+                x: tile.x, y: tile.y,
+              },
+            }).then((res) => {
+              if (res.error) {
+                state.addNotification(`Build failed: ${res.error}`, "error");
+                useGameStore.setState((s) => ({
+                  pendingBuildings: s.pendingBuildings.filter(
+                    (pb) => !(pb.x === tile.x && pb.y === tile.y)
+                  ),
+                }));
+              } else {
+                state.addNotification(
+                  `${DISPLAY_NAMES[state.buildMode!] ?? state.buildMode} placed at (${tile.x}, ${tile.y})`,
+                  "success"
+                );
+              }
+            });
+            state.setBuildMode(null);
+          }
+        } else if (mode === "potential-tap") {
+          // Check for worker first
+          const workerId = getWorkerAt(pos.x, pos.y);
+          if (workerId) {
+            state.setSelectedWorkerId(workerId);
+            state.setSelectedTile(null);
+          } else {
+            const tile = screenToTile(pos.x, pos.y);
+            state.setSelectedTile({ x: tile.x, y: tile.y });
+            state.setSelectedWorkerId(null);
+          }
+          state.setRoutePickerTarget(null);
+        }
+      }
+
+      if (mode === "routing") {
+        const pos = routeDragEndRef.current;
+        if (pos) {
+          const tile = screenToTile(pos.x, pos.y);
+          const state = storeRef.current;
+          const action = mouseActionRef.current;
+          if (action.type === "routing") {
+            const targetBuilding = state.buildings.find(
+              (b) => b.location.x === tile.x && b.location.y === tile.y
+            );
+            if (
+              targetBuilding &&
+              targetBuilding.entity_id !== action.fromBuildingId &&
+              targetBuilding.owner_id === state.player?.entity_id
+            ) {
+              state.setRoutePickerTarget({
+                fromBuildingId: action.fromBuildingId,
+                toBuildingId: targetBuilding.entity_id,
+                screenX: pos.x,
+                screenY: pos.y,
+              });
+            }
+          }
+        }
+        routeDragEndRef.current = null;
+      }
+
+      if (mode === "area") {
+        const endPos = routeDragEndRef.current;
+        if (endPos) {
+          const action = mouseActionRef.current;
+          if (action.type === "area") {
+            const endTile = screenToTile(endPos.x, endPos.y);
+            const x1 = Math.min(action.startTileX, endTile.x);
+            const y1 = Math.min(action.startTileY, endTile.y);
+            const x2 = Math.max(action.startTileX, endTile.x);
+            const y2 = Math.max(action.startTileY, endTile.y);
+            const state = storeRef.current;
+            const workerId = state.areaDrawMode;
+            if (workerId) {
+              const worker = state.workers.find((wk) => wk.entity_id === workerId);
+              if (worker) {
+                const existingFilter = (state.pendingWorkerFilter?.workerId === workerId
+                  ? state.pendingWorkerFilter.filter
+                  : worker.task_filter) ?? {};
+                const newFilter = { ...existingFilter, area: { x1, y1, x2, y2 } };
+                state.setPendingWorkerFilter(workerId, newFilter);
+                submitCommand("configure_worker", {
+                  worker_id: workerId,
+                  task_filter: newFilter,
+                });
+              }
+            }
+            state.setAreaDrawMode(null);
+          }
+        }
+        routeDragEndRef.current = null;
+      }
+
+      touchModeRef.current = "idle";
+      mouseActionRef.current = { type: "idle" };
+    };
+
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [screenToTile, getBuildingAt, getWorkerAt]);
+
   // Derive cursor style
   const state = useGameStore();
+  const isMobile = useIsMobile();
   let cursor = "grab";
   if (state.buildMode) cursor = "crosshair";
   else if (state.areaDrawMode) cursor = "crosshair";
@@ -913,7 +1185,7 @@ export function MapCanvas() {
       <canvas
         ref={canvasRef}
         className="map-canvas"
-        style={{ cursor }}
+        style={{ cursor, touchAction: "none" }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -929,7 +1201,17 @@ export function MapCanvas() {
       {/* Build mode banner */}
       {state.buildMode && (
         <div className="build-mode-indicator">
-          Placing: {DISPLAY_NAMES[state.buildMode] ?? state.buildMode} — Click tile to place, Esc to cancel
+          Placing: {DISPLAY_NAMES[state.buildMode] ?? state.buildMode}
+          {isMobile ? (
+            <button
+              className="build-mode-cancel"
+              onClick={() => state.setBuildMode(null)}
+            >
+              &#x2715;
+            </button>
+          ) : (
+            <span> — Click tile to place, Esc to cancel</span>
+          )}
         </div>
       )}
 

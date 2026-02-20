@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useGameStore } from "./state/store.js";
 import { useMapSubscription } from "./hooks/useMapSubscription.js";
+import { useIsMobile } from "./hooks/useIsMobile.js";
 import { fetchWorld, fetchPlayer, getMe } from "./api/client.js";
 import { LoginScreen } from "./components/LoginScreen.js";
 import { MapCanvas } from "./components/MapCanvas.js";
@@ -29,6 +30,9 @@ export function App() {
   const showMarket = useGameStore((s) => s.showMarket);
   const showWorkers = useGameStore((s) => s.showWorkers);
   const showMapSelector = useGameStore((s) => s.showMapSelector);
+  const showBuildSheet = useGameStore((s) => s.showBuildSheet);
+  const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
+  const isMobile = useIsMobile();
 
   // Connect to map via WS
   useMapSubscription();
@@ -69,7 +73,7 @@ export function App() {
   }
 
   return (
-    <div className="game">
+    <div className={`game${isMobile ? " is-mobile" : ""}`}>
       <TopBar />
       <div className="game-main">
         <MapCanvas />
@@ -79,7 +83,18 @@ export function App() {
         <ResourcePicker />
         {showMarket && <MarketPanel />}
       </div>
-      <BuildToolbar />
+      {isMobile ? (
+        <>
+          {!showBuildSheet && (
+            <button className="build-fab" onClick={toggleBuildSheet} title="Build">
+              +
+            </button>
+          )}
+          {showBuildSheet && <BuildToolbar />}
+        </>
+      ) : (
+        <BuildToolbar />
+      )}
       <Notifications />
       {showTechTree && <TechTree />}
       {showWorkers && <WorkerListPanel />}
