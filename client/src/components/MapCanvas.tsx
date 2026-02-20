@@ -5,7 +5,7 @@ import {
   TICK_INTERVAL_MS, TILES_PER_MAP,
   totalInventory, BUILDING_DEFS, TERRITORY_RADIUS,
   type Building, type BuildingClass, type MaterialType,
-  getTerritoryInfo, type TerritoryBuilding,
+  getTerritoryInfo, type TerritoryBuilding, toMapKey,
 } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 
@@ -72,6 +72,21 @@ export const DISPLAY_NAMES: Record<string, string> = {
   resonance_tuner: "Resonance Tuner", neural_loom: "Neural Loom", psychophysical_amp: "Psychophysical Amp",
   dampening_forge: "Dampening Forge", consciousness_engine: "Consciousness Engine",
 };
+
+function isInForeignTerritory(
+  territoryBuildings: TerritoryBuilding[],
+  tx: number,
+  ty: number,
+  playerId: string,
+): boolean {
+  return territoryBuildings.some((b) => {
+    if (b.owner_id === playerId) return false;
+    const radius = TERRITORY_RADIUS[b.class];
+    if (radius == null) return false;
+    const dist = Math.abs(tx - b.x) + Math.abs(ty - b.y);
+    return dist <= radius;
+  });
+}
 
 function getRouteColor(resource: string): string {
   if (resource === "money") return "#ffd54f";
@@ -252,6 +267,15 @@ export function MapCanvas() {
       // ── Territory overlay ──
       const playerId = state.player?.entity_id;
       if (playerId) {
+        const currentMapKey = state.currentMap
+          ? toMapKey(state.currentMap.dx, state.currentMap.dy, state.currentMap.mx, state.currentMap.my)
+          : null;
+        const hasAdminOutpostOnCurrentMap = currentMapKey
+          ? Boolean(state.player?.map_accounts[currentMapKey]?.admin_outpost_building_id)
+          : false;
+        const showForeignForInitialOutpost =
+          state.buildMode === "admin_outpost" && !hasAdminOutpostOnCurrentMap;
+
         // Collect territory buildings on this map
         const terBuildings: TerritoryBuilding[] = [];
         for (const b of state.buildings) {
@@ -265,27 +289,43 @@ export function MapCanvas() {
             for (let tx = minTX; tx <= maxTX; tx++) {
               if (tx < 0 || ty < 0 || tx >= TILES_PER_MAP || ty >= TILES_PER_MAP) continue;
               const info = getTerritoryInfo(terBuildings, tx, ty, playerId);
-              if (!info.inTerritory) continue;
+              const inForeignTerritory = showForeignForInitialOutpost
+                ? isInForeignTerritory(terBuildings, tx, ty, playerId)
+                : false;
+              if (!info.inTerritory && !inForeignTerritory) continue;
 
               const sx = (tx - cam.x) * ts;
               const sy = (ty - cam.y) * ts;
-              ctx.fillStyle = info.contested
-                ? "rgba(255, 183, 77, 0.10)"
-                : "rgba(79, 195, 247, 0.08)";
+              const isForeignOnly = inForeignTerritory && !info.inTerritory;
+              ctx.fillStyle = isForeignOnly
+                ? "rgba(244, 67, 54, 0.10)"
+                : info.contested
+                  ? "rgba(255, 183, 77, 0.10)"
+                  : "rgba(79, 195, 247, 0.08)";
               ctx.fillRect(sx, sy, ts, ts);
 
               // Border edges: draw dashed line on sides that border non-territory
-              ctx.strokeStyle = info.contested
-                ? "rgba(255, 183, 77, 0.25)"
-                : "rgba(79, 195, 247, 0.18)";
+              ctx.strokeStyle = isForeignOnly
+                ? "rgba(244, 67, 54, 0.30)"
+                : info.contested
+                  ? "rgba(255, 183, 77, 0.25)"
+                  : "rgba(79, 195, 247, 0.18)";
               ctx.lineWidth = 1;
               ctx.setLineDash([3, 3]);
 
               // Check adjacent tiles
-              const left = tx > 0 && getTerritoryInfo(terBuildings, tx - 1, ty, playerId).inTerritory;
-              const right = tx < TILES_PER_MAP - 1 && getTerritoryInfo(terBuildings, tx + 1, ty, playerId).inTerritory;
-              const top = ty > 0 && getTerritoryInfo(terBuildings, tx, ty - 1, playerId).inTerritory;
-              const bottom = ty < TILES_PER_MAP - 1 && getTerritoryInfo(terBuildings, tx, ty + 1, playerId).inTerritory;
+              const left = tx > 0 && (isForeignOnly
+                ? isInForeignTerritory(terBuildings, tx - 1, ty, playerId)
+                : getTerritoryInfo(terBuildings, tx - 1, ty, playerId).inTerritory);
+              const right = tx < TILES_PER_MAP - 1 && (isForeignOnly
+                ? isInForeignTerritory(terBuildings, tx + 1, ty, playerId)
+                : getTerritoryInfo(terBuildings, tx + 1, ty, playerId).inTerritory);
+              const top = ty > 0 && (isForeignOnly
+                ? isInForeignTerritory(terBuildings, tx, ty - 1, playerId)
+                : getTerritoryInfo(terBuildings, tx, ty - 1, playerId).inTerritory);
+              const bottom = ty < TILES_PER_MAP - 1 && (isForeignOnly
+                ? isInForeignTerritory(terBuildings, tx, ty + 1, playerId)
+                : getTerritoryInfo(terBuildings, tx, ty + 1, playerId).inTerritory);
 
               if (!left) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + ts); ctx.stroke(); }
               if (!right) { ctx.beginPath(); ctx.moveTo(sx + ts, sy); ctx.lineTo(sx + ts, sy + ts); ctx.stroke(); }
@@ -301,6 +341,12 @@ export function MapCanvas() {
       // ── Build-mode cursor validation & territory preview ──
       if (state.buildMode && playerId) {
         const bClass = state.buildMode as BuildingClass;
+        const currentMapKey = state.currentMap
+          ? toMapKey(state.currentMap.dx, state.currentMap.dy, state.currentMap.mx, state.currentMap.my)
+          : null;
+        const hasAdminOutpostOnCurrentMap = currentMapKey
+          ? Boolean(state.player?.map_accounts[currentMapKey]?.admin_outpost_building_id)
+          : false;
         const mouseScreen = mousePosRef.current;
         const mWorld = { x: mouseScreen.x / ts + cam.x, y: mouseScreen.y / ts + cam.y };
         const hoverTX = Math.floor(mWorld.x);
@@ -340,6 +386,13 @@ export function MapCanvas() {
               if (!info.fullTerritory || info.contested) {
                 canPlace = false;
               }
+            }
+          }
+
+          // First admin outpost cannot be placed in other players' territory
+          if (bClass === "admin_outpost" && !hasAdminOutpostOnCurrentMap) {
+            if (isInForeignTerritory(bTerBuildings, hoverTX, hoverTY, playerId)) {
+              canPlace = false;
             }
           }
 

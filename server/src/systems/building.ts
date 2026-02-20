@@ -69,6 +69,31 @@ export function placeBuilding(
     if (account?.admin_outpost_building_id) {
       return { ok: false, error: "Already have an admin outpost on this map" };
     }
+
+    // Initial admin outpost cannot be placed inside another player's territory
+    const territoryBuildings: TerritoryBuilding[] = [];
+    for (const b of store.buildings.values()) {
+      if (b.map_key === mapKey && TERRITORY_RADIUS[b.class] != null) {
+        territoryBuildings.push({
+          x: b.location.x,
+          y: b.location.y,
+          class: b.class,
+          owner_id: b.owner_id,
+        });
+      }
+    }
+
+    const inOtherTerritory = territoryBuildings.some((b) => {
+      if (b.owner_id === player.entity_id) return false;
+      const radius = TERRITORY_RADIUS[b.class];
+      if (radius == null) return false;
+      const dist = Math.abs(location.x - b.x) + Math.abs(location.y - b.y);
+      return dist <= radius;
+    });
+
+    if (inOtherTerritory) {
+      return { ok: false, error: "Cannot place admin outpost in another player's territory" };
+    }
   }
 
   // Admin outpost on non-home maps requires unlock_new_map research

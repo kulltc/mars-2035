@@ -58,7 +58,7 @@ export function App() {
   useEffect(() => {
     if (!player || !token) return;
     fetchPlayer(player.entity_id).then(setPlayer).catch(() => {});
-  }, [events.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [events]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!world) {
     return (

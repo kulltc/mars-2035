@@ -175,11 +175,11 @@ export const useGameStore = create<GameState>((set) => ({
   buildings: [],
   setBuildings: (buildings) =>
     set((state) => {
-      // Clear pending buildings that server now has or that have expired (10s timeout)
+      // Clear pending buildings that server now has or that have expired (2s timeout)
       const buildingPositions = new Set(buildings.map((b) => `${b.location.x}:${b.location.y}`));
       const now = Date.now();
       const pendingBuildings = state.pendingBuildings.filter(
-        (pb) => !buildingPositions.has(`${pb.x}:${pb.y}`) && now - pb.placedAt < 10_000
+        (pb) => !buildingPositions.has(`${pb.x}:${pb.y}`) && now - pb.placedAt < 2_000
       );
       return { buildings, pendingBuildings };
     }),
