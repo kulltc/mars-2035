@@ -13,7 +13,7 @@ import type {
   ResourceType,
   WorkerFilter,
 } from "@mars-2035/shared";
-import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey, RESEARCH_TREE } from "@mars-2035/shared";
+import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey, RESEARCH_TREE, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 import { placeBuilding, spawnWorker, applyResearchEffects } from "../../systems/building.js";
 
@@ -170,6 +170,43 @@ function handleExport(store: WorldStore, player: Player, data: Record<string, un
     events: [{
       type: "export",
       data: { building_id, material, amount, price, revenue, player_id: player.entity_id },
+      mapKey: building.map_key,
+    }],
+  };
+}
+
+function handleImport(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { building_id, material, amount } = data as {
+    building_id: string;
+    material: ResourceType;
+    amount: number;
+  };
+
+  if (!amount || amount <= 0) return { ok: false, error: "Amount must be positive" };
+  if (!RESOURCE_TYPES.includes(material)) return { ok: false, error: "Can only import base materials" };
+
+  const building = store.buildings.get(building_id);
+  if (!building) return { ok: false, error: "Building not found" };
+  if (building.class !== "port") return { ok: false, error: "Only ports can import" };
+  if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+
+  const price = store.marketPrices[material] ?? 1;
+  const cost = Math.round(amount * price * IMPORT_PRICE_MULTIPLIER * 100) / 100;
+  const money = building.inventory.money ?? 0;
+  if (money < cost) return { ok: false, error: `Insufficient money (need ${cost.toFixed(1)}, have ${money.toFixed(1)})` };
+
+  // Check capacity
+  const remaining = remainingCapacity(building.inventory, building.capacity);
+  if (remaining < amount) return { ok: false, error: `Insufficient storage (need ${amount}, have ${remaining.toFixed(0)} free)` };
+
+  building.inventory.money = money - cost;
+  building.inventory[material] = (building.inventory[material] ?? 0) + amount;
+
+  return {
+    ok: true,
+    events: [{
+      type: "import",
+      data: { building_id, material, amount, price, cost, player_id: player.entity_id },
       mapKey: building.map_key,
     }],
   };
@@ -613,6 +650,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   place_building: handlePlaceBuilding,
   transfer: handleTransfer,
   export: handleExport,
+  import: handleImport,
   configure_auto_sell: handleConfigureAutoSell,
   configure_route: handleConfigureRoute,
   delete_route: handleDeleteRoute,

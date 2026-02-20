@@ -111,6 +111,7 @@ export const BASE_MARKET_PRICES: Record<ResourceType, number> = {
 
 export const TRADEABLE_TYPES = Object.keys(BASE_MARKET_PRICES) as ResourceType[];
 
+export const IMPORT_PRICE_MULTIPLIER = 1.5;
 export const MARKET_VOLATILITY = 0.1;
 export const MARKET_PRICE_MIN = 0.2;
 export const MARKET_PRICE_MAX = 500.0;

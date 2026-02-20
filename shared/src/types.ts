@@ -231,6 +231,7 @@ export type EventType =
   | "market_update"
   | "transfer"
   | "export"
+  | "import"
   | "route_executed"
   | "command_failed"
   | "player_registered"
@@ -268,6 +269,7 @@ export type CommandType =
   | "configure_worker"
   | "do_research"
   | "set_buffer_stock"
+  | "import"
   | "forfeit";
 
 export interface Command {

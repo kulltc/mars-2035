@@ -3,7 +3,7 @@ import { useGameStore } from "../state/store.js";
 import { submitCommand } from "../api/client.js";
 import {
   MATERIAL_TYPES, TRADEABLE_TYPES, BUILDING_DEFS, SUSPENSION_DESTROY_TICKS,
-  totalInventory, outputBufferTotal,
+  totalInventory, outputBufferTotal, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER,
   type MaterialType, type ResourceType, type AutoSellRule, type Building,
   RESEARCH_TREE, type ResearchDef,
 } from "@mars-2035/shared";
@@ -52,6 +52,11 @@ export function BuildingDetail() {
 
   // Local buffer stock state
   const [localBufferStock, setLocalBufferStock] = useState<Partial<Record<MaterialType, number>>>({});
+
+  // Port mode (buy/sell toggle)
+  const [portMode, setPortMode] = useState<"sell" | "buy">("sell");
+  const [buyResource, setBuyResource] = useState<ResourceType>(RESOURCE_TYPES[0]);
+  const [buyAmount, setBuyAmount] = useState(1);
 
   // Local auto-sell state
   const [localAutoSell, setLocalAutoSell] = useState<Partial<Record<ResourceType, AutoSellRule | null>>>({});
@@ -332,57 +337,143 @@ export function BuildingDetail() {
         );
       })()}
 
-      {/* Auto-sell (port only) */}
+      {/* Port buy/sell (port only) */}
       {building.class === "port" && (
         <div className="bd-section">
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span className="bd-section-title" style={{ margin: 0 }}>Auto-Sell</span>
+          {/* Mode toggle */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
             <button
-              className="btn btn-sm"
-              onClick={() => { for (const r of TRADEABLE_TYPES) handleAutoSellChange(r, "any_rate"); }}
+              className={`btn btn-sm${portMode === "sell" ? " btn-accent" : ""}`}
+              onClick={() => setPortMode("sell")}
             >
-              All Any
+              Sell
             </button>
             <button
-              className="btn btn-sm"
-              onClick={() => { for (const r of TRADEABLE_TYPES) handleAutoSellChange(r, "off"); }}
+              className={`btn btn-sm${portMode === "buy" ? " btn-accent" : ""}`}
+              onClick={() => setPortMode("buy")}
             >
-              All Off
+              Buy
             </button>
           </div>
-          <div className="auto-sell-grid">
-            {TRADEABLE_TYPES.map((res) => {
-              const rule = getEffectiveRule(res);
-              const currentMode = rule?.mode ?? "off";
-              const price = marketPrices?.[res];
-              return (
-                <div key={res} className="auto-sell-row">
-                  <span className="as-name">{res.replace(/_/g, " ")}</span>
-                  <span className="as-price">{price != null ? `$${price.toFixed(1)}` : "\u2014"}</span>
-                  <button
-                    className={`auto-sell-btn ${currentMode === "off" ? "" : "active"}`}
-                    onClick={() => {
-                      const next = currentMode === "off" ? "any_rate" : currentMode === "any_rate" ? "min_rate" : "off";
-                      handleAutoSellChange(res, next, rule?.min_price);
-                    }}
+
+          {/* Sell mode: existing auto-sell grid */}
+          {portMode === "sell" && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span className="bd-section-title" style={{ margin: 0 }}>Auto-Sell</span>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => { for (const r of TRADEABLE_TYPES) handleAutoSellChange(r, "any_rate"); }}
+                >
+                  All Any
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => { for (const r of TRADEABLE_TYPES) handleAutoSellChange(r, "off"); }}
+                >
+                  All Off
+                </button>
+              </div>
+              <div className="auto-sell-grid">
+                {TRADEABLE_TYPES.map((res) => {
+                  const rule = getEffectiveRule(res);
+                  const currentMode = rule?.mode ?? "off";
+                  const price = marketPrices?.[res];
+                  return (
+                    <div key={res} className="auto-sell-row">
+                      <span className="as-name">{res.replace(/_/g, " ")}</span>
+                      <span className="as-price">{price != null ? `$${price.toFixed(1)}` : "\u2014"}</span>
+                      <button
+                        className={`auto-sell-btn ${currentMode === "off" ? "active" : ""}`}
+                        onClick={() => handleAutoSellChange(res, "off")}
+                      >
+                        Off
+                      </button>
+                      <button
+                        className={`auto-sell-btn ${currentMode === "any_rate" ? "active" : ""}`}
+                        onClick={() => handleAutoSellChange(res, "any_rate")}
+                      >
+                        Any
+                      </button>
+                      <button
+                        className={`auto-sell-btn ${currentMode === "min_rate" ? "active" : ""}`}
+                        onClick={() => handleAutoSellChange(res, "min_rate", rule?.min_price ?? 1)}
+                      >
+                        Min
+                      </button>
+                      {currentMode === "min_rate" && (
+                        <input
+                          type="number"
+                          className="input"
+                          step="0.5"
+                          min="0.1"
+                          value={rule?.min_price ?? 1}
+                          onChange={(e) => handleAutoSellChange(res, "min_rate", Number(e.target.value))}
+                          style={{ width: 50, padding: "1px 4px", fontSize: 10 }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Buy mode: import form */}
+          {portMode === "buy" && (() => {
+            const unitPrice = (marketPrices?.[buyResource] ?? 1) * IMPORT_PRICE_MULTIPLIER;
+            const totalCost = Math.round(buyAmount * unitPrice * 100) / 100;
+            const portMoney = building.inventory.money ?? 0;
+            const canAfford = portMoney >= totalCost && buyAmount > 0;
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="bd-section-title" style={{ margin: 0 }}>Buy Materials (150% market)</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <select
+                    className="input"
+                    value={buyResource}
+                    onChange={(e) => setBuyResource(e.target.value as ResourceType)}
+                    style={{ fontSize: 12, padding: "2px 4px" }}
                   >
-                    {currentMode === "off" ? "Off" : currentMode === "any_rate" ? "Any" : `Min $${rule?.min_price ?? 1}`}
-                  </button>
-                  {currentMode === "min_rate" && (
-                    <input
-                      type="number"
-                      className="input"
-                      step="0.5"
-                      min="0.1"
-                      value={rule?.min_price ?? 1}
-                      onChange={(e) => handleAutoSellChange(res, "min_rate", Number(e.target.value))}
-                      style={{ width: 50, padding: "1px 4px", fontSize: 10 }}
-                    />
-                  )}
+                    {RESOURCE_TYPES.map((r) => (
+                      <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    className="input"
+                    min="1"
+                    step="1"
+                    value={buyAmount}
+                    onChange={(e) => setBuyAmount(Math.max(1, Math.round(Number(e.target.value))))}
+                    style={{ width: 60, fontSize: 12, padding: "2px 4px" }}
+                  />
                 </div>
-              );
-            })}
-          </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                  Unit: ${unitPrice.toFixed(2)} &middot; Total: <strong style={{ color: canAfford ? "var(--money)" : "var(--danger)" }}>${totalCost.toFixed(2)}</strong>
+                  {" "}&middot; Port money: ${portMoney.toFixed(1)}
+                </div>
+                <button
+                  className="btn btn-accent btn-sm"
+                  disabled={!canAfford}
+                  onClick={async () => {
+                    const res = await submitCommand("import", {
+                      building_id: building.entity_id,
+                      material: buyResource,
+                      amount: buyAmount,
+                    });
+                    if (res.error) {
+                      addNotification(`Import failed: ${res.error}`, "error");
+                    } else {
+                      addNotification(`Bought ${buyAmount} ${buyResource.replace(/_/g, " ")}`, "success");
+                    }
+                  }}
+                >
+                  Buy
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
 
