@@ -129,7 +129,9 @@ export function processUpkeep(store: WorldStore) {
       const workerCost = Math.min(activeCount, affordableWorkers) * WORKER_UPKEEP;
       const total = buildingUpkeep + workerCost;
 
-      adminOutpost.inventory.money = money - total;
+      // Don't let upkeep push money below 0 (the Math.max(1,...) "free" worker
+      // can cause negative money when funds are barely positive)
+      adminOutpost.inventory.money = Math.max(0, money - total);
       store.pushEvent(
         "upkeep_charged",
         { player_id: playerId, amount: total },
