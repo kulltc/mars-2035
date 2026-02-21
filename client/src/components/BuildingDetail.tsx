@@ -4,7 +4,7 @@ import { submitCommand } from "../api/client.js";
 import {
   MATERIAL_TYPES, TRADEABLE_TYPES, BUILDING_DEFS, SUSPENSION_DESTROY_TICKS,
   totalInventory, outputBufferTotal, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER,
-  type MaterialType, type ResourceType, type AutoSellRule, type Building, parseMapKey,
+  type MaterialType, type ResourceType, type AutoSellRule, type RouteResource, type Building, parseMapKey,
   RESEARCH_TREE, sectorName, type ResearchDef,
 } from "@mars-2035/shared";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
@@ -78,6 +78,7 @@ export function BuildingDetail() {
   const [relayMaterials, setRelayMaterials] = useState<MaterialType[]>([]);
   const [moneyTransferTargetMapKey, setMoneyTransferTargetMapKey] = useState("");
   const [moneyTransferAmount, setMoneyTransferAmount] = useState(100);
+  const [bufferStockExpanded, setBufferStockExpanded] = useState(false);
 
   // Local auto-sell state
   const [localAutoSell, setLocalAutoSell] = useState<Partial<Record<ResourceType, AutoSellRule | null>>>({});
@@ -153,7 +154,7 @@ export function BuildingDetail() {
     return building.auto_sell?.[res] ?? null;
   };
 
-  const handleDeleteRoute = async (toBuildingId: string, resource: MaterialType) => {
+  const handleDeleteRoute = async (toBuildingId: string, resource: RouteResource) => {
     // Optimistic
     const prev = building.outgoing_routes ?? [];
     updateBuilding({
@@ -299,8 +300,8 @@ export function BuildingDetail() {
             const dest = buildings.find((b) => b.entity_id === route.to_building_id);
             return (
               <div key={`${route.resource}-${route.to_building_id}-${i}`} className="route-item">
-                <span className="route-res" style={{ color: route.resource === "money" ? "var(--money)" : "var(--text-primary)" }}>
-                  {route.resource.replace(/_/g, " ")}
+                <span className="route-res" style={{ color: route.resource === "money" ? "var(--money)" : route.resource === "all" ? "var(--text-secondary)" : "var(--text-primary)" }}>
+                  {route.resource === "all" ? "all resources" : route.resource.replace(/_/g, " ")}
                 </span>
                 <span className="route-arrow">&rarr;</span>
                 <span className="route-dest">
@@ -428,42 +429,74 @@ export function BuildingDetail() {
             if ((building.buffer_stock[key] ?? 0) > 0) materials.add(key);
           }
         }
-        // Also include routed resources
+        // Also include routed resources — "all" adds all non-money materials
         for (const route of effectiveRoutes) {
-          materials.add(route.resource);
+          if (route.resource === "all") {
+            for (const m of MATERIAL_TYPES) {
+              if (m !== "money") materials.add(m);
+            }
+          } else {
+            materials.add(route.resource);
+          }
         }
         if (materials.size === 0) return null;
-        const sorted = [...materials].sort();
+
+        // Split into priority (recipe inputs) and other
+        const recipeInputs = new Set<MaterialType>();
+        const recipeDef = BUILDING_DEFS[building.class].recipe;
+        if (recipeDef) {
+          for (const [m, v] of Object.entries(recipeDef.inputs)) {
+            if (v && v > 0) recipeInputs.add(m as MaterialType);
+          }
+        }
+
+        const allSorted = [...materials].sort();
+        const priority = allSorted.filter((m) => recipeInputs.has(m));
+        const other = allSorted.filter((m) => !recipeInputs.has(m));
+        const showExpand = other.length > 0;
+        const visibleMaterials = showExpand && !bufferStockExpanded ? priority : allSorted;
+
+        const renderRow = (mat: MaterialType) => {
+          const serverVal = building.buffer_stock?.[mat] ?? 0;
+          const val = mat in localBufferStock ? (localBufferStock[mat] ?? 0) : serverVal;
+          return (
+            <div key={mat} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+              <span style={{ flex: 1, color: "var(--text-secondary)" }}>{mat.replace(/_/g, " ")}</span>
+              <input
+                type="number"
+                className="input"
+                min="0"
+                step="1"
+                value={val}
+                onChange={(e) => {
+                  const amount = Math.max(0, Math.round(Number(e.target.value)));
+                  setLocalBufferStock((prev) => ({ ...prev, [mat]: amount }));
+                  submitCommand("set_buffer_stock", {
+                    building_id: building.entity_id,
+                    resource: mat,
+                    amount,
+                  });
+                }}
+                style={{ width: 60, padding: "1px 4px", fontSize: 11 }}
+              />
+            </div>
+          );
+        };
+
         return (
           <div className="bd-section">
             <div className="bd-section-title">Buffer Stock</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {sorted.map((mat) => {
-                const serverVal = building.buffer_stock?.[mat] ?? 0;
-                const val = mat in localBufferStock ? (localBufferStock[mat] ?? 0) : serverVal;
-                return (
-                  <div key={mat} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                    <span style={{ flex: 1, color: "var(--text-secondary)" }}>{mat.replace(/_/g, " ")}</span>
-                    <input
-                      type="number"
-                      className="input"
-                      min="0"
-                      step="1"
-                      value={val}
-                      onChange={(e) => {
-                        const amount = Math.max(0, Math.round(Number(e.target.value)));
-                        setLocalBufferStock((prev) => ({ ...prev, [mat]: amount }));
-                        submitCommand("set_buffer_stock", {
-                          building_id: building.entity_id,
-                          resource: mat,
-                          amount,
-                        });
-                      }}
-                      style={{ width: 60, padding: "1px 4px", fontSize: 11 }}
-                    />
-                  </div>
-                );
-              })}
+              {visibleMaterials.map(renderRow)}
+              {showExpand && (
+                <button
+                  className="btn btn-sm"
+                  style={{ fontSize: 11, marginTop: 2, alignSelf: "flex-start" }}
+                  onClick={() => setBufferStockExpanded(!bufferStockExpanded)}
+                >
+                  {bufferStockExpanded ? `Hide ${other.length} more` : `Show ${other.length} more`}
+                </button>
+              )}
             </div>
           </div>
         );

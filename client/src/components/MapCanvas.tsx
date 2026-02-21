@@ -92,6 +92,7 @@ function isInForeignTerritory(
 }
 
 function getRouteColor(resource: string): string {
+  if (resource === "all") return "#ffffff";
   if (resource === "money") return "#ffd54f";
   const morphic = ["steel", "ferrite_alloy", "morphic_composite", "morphic_core", "servo_cortex", "autonomic_matrix"];
   const toroidin = ["silicon", "thermoplast", "lattice_fiber", "toroidin_plate", "muphrid_cell", "paradox_weave"];
@@ -1291,7 +1292,13 @@ export function MapCanvas() {
       {/* Area draw banner */}
       {state.areaDrawMode && (
         <div className="area-draw-indicator">
-          Draw worker activity area — Click & drag, Esc to cancel
+          <span>Draw worker activity area — Click & drag to set</span>
+          <button
+            className="build-mode-cancel"
+            onClick={() => state.setAreaDrawMode(null)}
+          >
+            &#x2715;
+          </button>
         </div>
       )}
 

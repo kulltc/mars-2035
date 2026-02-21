@@ -12,6 +12,7 @@ import type {
   Player,
   QuantumRelayRule,
   ResourceType,
+  RouteResource,
   WorkerFilter,
 } from "@mars-2035/shared";
 import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey, RESEARCH_TREE, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER } from "@mars-2035/shared";
@@ -255,7 +256,7 @@ function handleConfigureRoute(store: WorldStore, player: Player, data: Record<st
   const { from_building_id, to_building_id, resource } = data as {
     from_building_id: string;
     to_building_id: string;
-    resource: MaterialType;
+    resource: RouteResource;
   };
 
   const from = store.buildings.get(from_building_id);
@@ -276,6 +277,19 @@ function handleConfigureRoute(store: WorldStore, player: Player, data: Record<st
   );
   if (exists) return { ok: false, error: "Route already exists" };
 
+  if (resource === "all") {
+    // Adding "all" removes existing specific routes to same destination (redundant)
+    from.outgoing_routes = from.outgoing_routes.filter(
+      (r) => r.to_building_id !== to_building_id
+    );
+  } else {
+    // Adding a specific route when "all" exists to same destination is rejected
+    const hasAll = from.outgoing_routes.some(
+      (r) => r.resource === "all" && r.to_building_id === to_building_id
+    );
+    if (hasAll) return { ok: false, error: "An 'all resources' route already exists to this destination" };
+  }
+
   from.outgoing_routes.push({ resource, to_building_id });
 
   return {
@@ -292,7 +306,7 @@ function handleDeleteRoute(store: WorldStore, player: Player, data: Record<strin
   const { from_building_id, to_building_id, resource } = data as {
     from_building_id: string;
     to_building_id: string;
-    resource: MaterialType;
+    resource: RouteResource;
   };
 
   const from = store.buildings.get(from_building_id);

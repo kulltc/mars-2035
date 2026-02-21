@@ -115,8 +115,10 @@ export interface AutoSellRule {
   min_price?: number;
 }
 
+export type RouteResource = MaterialType | "all";
+
 export interface OutgoingRoute {
-  resource: MaterialType;
+  resource: RouteResource;
   to_building_id: string;
 }
 

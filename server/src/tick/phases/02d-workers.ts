@@ -9,6 +9,7 @@ import {
   totalInventory,
   WORKER_MONEY_CAPACITY,
   BUILDING_DEFS,
+  MATERIAL_TYPES,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 
@@ -276,30 +277,41 @@ function generatePickupTasks(store: WorldStore) {
     if (!building.outgoing_routes) continue;
 
     for (const route of building.outgoing_routes) {
-      // Skip if building has no shippable stock (respecting buffer_stock)
-      const available = (building.output_buffer?.[route.resource] ?? 0) + (building.inventory[route.resource] ?? 0);
-      const buffer = building.buffer_stock?.[route.resource] ?? 0;
-      if (available - buffer <= 0) continue;
+      // Expand "all" routes into per-resource tasks
+      const resources: MaterialType[] = route.resource === "all"
+        ? MATERIAL_TYPES.filter((m) => {
+            const available = (building.output_buffer?.[m] ?? 0) + (building.inventory[m] ?? 0);
+            const buffer = building.buffer_stock?.[m] ?? 0;
+            return available - buffer > 0;
+          })
+        : [route.resource];
 
-      // Only skip if an unclaimed pickup task is already pending in the queue
-      const exists = taskExists(store, "pickup", (t: PickupTask) =>
-        t.from_building_id === building.entity_id &&
-        t.to_building_id === route.to_building_id &&
-        t.resource === route.resource
-      );
-      if (exists) continue;
+      for (const res of resources) {
+        // Skip if building has no shippable stock (respecting buffer_stock)
+        const available = (building.output_buffer?.[res] ?? 0) + (building.inventory[res] ?? 0);
+        const buffer = building.buffer_stock?.[res] ?? 0;
+        if (available - buffer <= 0) continue;
 
-      const taskId = `task_${++store.taskCounter}`;
-      const task: PickupTask = {
-        id: taskId,
-        type: "pickup",
-        owner_id: building.owner_id,
-        map_key: building.map_key,
-        from_building_id: building.entity_id,
-        to_building_id: route.to_building_id,
-        resource: route.resource,
-      };
-      store.taskQueue.set(taskId, task);
+        // Only skip if an unclaimed pickup task is already pending in the queue
+        const exists = taskExists(store, "pickup", (t: PickupTask) =>
+          t.from_building_id === building.entity_id &&
+          t.to_building_id === route.to_building_id &&
+          t.resource === res
+        );
+        if (exists) continue;
+
+        const taskId = `task_${++store.taskCounter}`;
+        const task: PickupTask = {
+          id: taskId,
+          type: "pickup",
+          owner_id: building.owner_id,
+          map_key: building.map_key,
+          from_building_id: building.entity_id,
+          to_building_id: route.to_building_id,
+          resource: res,
+        };
+        store.taskQueue.set(taskId, task);
+      }
     }
   }
 }

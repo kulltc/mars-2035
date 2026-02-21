@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useGameStore } from "../state/store.js";
-import { MATERIAL_TYPES, type MaterialType } from "@mars-2035/shared";
+import { MATERIAL_TYPES, type RouteResource } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
 import { useIsMobile } from "../hooks/useIsMobile.js";
@@ -52,15 +52,21 @@ export function ResourcePicker() {
   const toBuilding = buildings.find((b) => b.entity_id === routePickerTarget.toBuildingId);
   if (!fromBuilding || !toBuilding) return null;
 
-  const handleSelect = async (material: MaterialType) => {
+  const handleSelect = async (resource: RouteResource) => {
     // Optimistic update
-    const newRoute = { resource: material, to_building_id: toBuilding.entity_id };
+    const newRoute = { resource, to_building_id: toBuilding.entity_id };
+    const prevRoutes = fromBuilding.outgoing_routes ?? [];
+    // If "all", remove existing specific routes to same destination
+    const filteredRoutes = resource === "all"
+      ? prevRoutes.filter((r) => r.to_building_id !== toBuilding.entity_id)
+      : prevRoutes;
     updateBuilding({
       ...fromBuilding,
-      outgoing_routes: [...(fromBuilding.outgoing_routes ?? []), newRoute],
+      outgoing_routes: [...filteredRoutes, newRoute],
     });
+    const label = resource === "all" ? "all resources" : resource.replace(/_/g, " ");
     addNotification(
-      `Route: ${material.replace(/_/g, " ")} \u2192 ${DISPLAY_NAMES[toBuilding.class] ?? toBuilding.class}`,
+      `Route: ${label} \u2192 ${DISPLAY_NAMES[toBuilding.class] ?? toBuilding.class}`,
       "success"
     );
     setRoutePickerTarget(null);
@@ -68,14 +74,14 @@ export function ResourcePicker() {
     const result = await submitCommand("configure_route", {
       from_building_id: fromBuilding.entity_id,
       to_building_id: toBuilding.entity_id,
-      resource: material,
+      resource,
     });
     if (result.error) {
       addNotification(`Route failed: ${result.error}`, "error");
       // Revert
       updateBuilding({
         ...fromBuilding,
-        outgoing_routes: fromBuilding.outgoing_routes ?? [],
+        outgoing_routes: prevRoutes,
       });
     }
   };
@@ -90,6 +96,13 @@ export function ResourcePicker() {
       }}
     >
       <div className="rp-title">Route resource</div>
+      <div
+        className="rp-item"
+        onClick={() => handleSelect("all")}
+      >
+        <span className="rp-dot" style={{ background: "#ffffff" }} />
+        all resources
+      </div>
       {MATERIAL_TYPES.map((m) => (
         <div
           key={m}
