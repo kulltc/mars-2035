@@ -41,8 +41,8 @@ export function processWorkers(store: WorldStore) {
     if (worker.state !== "idle") continue;
     if (worker.worker_status === "inactive") continue;
 
-    // If worker has cargo, send it home first
-    if (totalInventory(worker.inventory) > 0) {
+    // If worker has cargo (including money), send it home first
+    if (totalInventory(worker.inventory) > 0 || (worker.inventory.money ?? 0) > 0) {
       const outpostId = findAdminOutpost(store, worker);
       const outpost = outpostId ? store.buildings.get(outpostId) : undefined;
       if (outpost) {
@@ -157,7 +157,8 @@ export function processWorkers(store: WorldStore) {
 
         const res = task.resource;
         const carrying = worker.inventory[res] ?? 0;
-        const destRemaining = remainingCapacity(dest.inventory, dest.capacity);
+        // Money doesn't count toward storage capacity, so always allow it
+        const destRemaining = res === "money" ? carrying : remainingCapacity(dest.inventory, dest.capacity);
         const amount = Math.min(carrying, destRemaining);
 
         if (amount > 0) {
