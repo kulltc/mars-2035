@@ -21,7 +21,8 @@ export function processTaxes(store: WorldStore) {
 
     // Distribute proportionally to each player's admin_outpost on this map
     for (const [playerId, count] of playerBuildings) {
-      const share = count / total;
+      const effectiveCount = Math.max(0, count - 1);
+      const share = total > 0 ? effectiveCount / total : 0;
       const amount = Math.round(pool * share * 100) / 100;
       if (amount <= 0) continue;
 

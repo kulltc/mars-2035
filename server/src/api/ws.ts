@@ -18,11 +18,12 @@ function computeTaxInfo(store: WorldStore, mapKey: MapKey): TaxInfo {
   const players: TaxInfo["players"] = [];
   for (const [playerId, count] of playerCounts) {
     const player = store.players.get(playerId);
+    const effectiveCount = Math.max(0, count - 1);
     players.push({
       playerId,
       name: player?.name ?? "Unknown",
       buildings: count,
-      share: total > 0 ? count / total : 0,
+      share: total > 0 ? effectiveCount / total : 0,
     });
   }
   return { taxRate, players };

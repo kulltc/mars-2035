@@ -32,7 +32,7 @@ export function TaxPanel() {
               <tr>
                 <th>Player</th>
                 <th>Buildings</th>
-                <th>Share</th>
+                <th>Payout Share</th>
               </tr>
             </thead>
             <tbody>
@@ -51,8 +51,9 @@ export function TaxPanel() {
 
         <div className="tax-explanation">
           Each territory building (Admin Outpost, Infra Tower, Research Station)
-          adds {(TAX_PER_BUILDING * 100).toFixed(1)}% to the map's tax rate. Tax is levied on all market sales and
-          distributed proportionally to territory building owners.
+          adds {(TAX_PER_BUILDING * 100).toFixed(1)}% to the map's tax rate. Tax is levied on all market sales.
+          Payout share uses effective buildings: (your buildings - 1) / total territory buildings on the map,
+          so the first territory building (your admin outpost) increases tax but does not earn tax returns.
         </div>
       </div>
     </div>
