@@ -58,13 +58,13 @@ export function ResourcePicker() {
     const prevRoutes = fromBuilding.outgoing_routes ?? [];
     // If "all", remove existing specific routes to same destination
     const filteredRoutes = resource === "all"
-      ? prevRoutes.filter((r) => r.to_building_id !== toBuilding.entity_id)
+      ? prevRoutes.filter((r) => !(r.to_building_id === toBuilding.entity_id && r.resource !== "money"))
       : prevRoutes;
     updateBuilding({
       ...fromBuilding,
       outgoing_routes: [...filteredRoutes, newRoute],
     });
-    const label = resource === "all" ? "all resources" : resource.replace(/_/g, " ");
+    const label = resource === "all" ? "all materials" : resource.replace(/_/g, " ");
     addNotification(
       `Route: ${label} \u2192 ${DISPLAY_NAMES[toBuilding.class] ?? toBuilding.class}`,
       "success"
@@ -101,7 +101,7 @@ export function ResourcePicker() {
         onClick={() => handleSelect("all")}
       >
         <span className="rp-dot" style={{ background: "#ffffff" }} />
-        all resources
+        all materials
       </div>
       {MATERIAL_TYPES.map((m) => (
         <div

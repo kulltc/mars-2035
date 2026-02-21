@@ -278,16 +278,20 @@ function handleConfigureRoute(store: WorldStore, player: Player, data: Record<st
   if (exists) return { ok: false, error: "Route already exists" };
 
   if (resource === "all") {
-    // Adding "all" removes existing specific routes to same destination (redundant)
+    // Adding "all" removes existing non-money specific routes to same destination (redundant)
+    // Money can coexist as a separate route.
     from.outgoing_routes = from.outgoing_routes.filter(
-      (r) => r.to_building_id !== to_building_id
+      (r) => !(r.to_building_id === to_building_id && r.resource !== "money")
     );
   } else {
-    // Adding a specific route when "all" exists to same destination is rejected
+    // Adding a specific non-money route when "all" exists to same destination is rejected.
+    // Money route is allowed because "all" excludes money.
     const hasAll = from.outgoing_routes.some(
       (r) => r.resource === "all" && r.to_building_id === to_building_id
     );
-    if (hasAll) return { ok: false, error: "An 'all resources' route already exists to this destination" };
+    if (hasAll && resource !== "money") {
+      return { ok: false, error: "An 'all resources' route already exists to this destination" };
+    }
   }
 
   from.outgoing_routes.push({ resource, to_building_id });

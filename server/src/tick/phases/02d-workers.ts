@@ -280,6 +280,7 @@ function generatePickupTasks(store: WorldStore) {
       // Expand "all" routes into per-resource tasks
       const resources: MaterialType[] = route.resource === "all"
         ? MATERIAL_TYPES.filter((m) => {
+            if (m === "money") return false;
             const available = (building.output_buffer?.[m] ?? 0) + (building.inventory[m] ?? 0);
             const buffer = building.buffer_stock?.[m] ?? 0;
             return available - buffer > 0;

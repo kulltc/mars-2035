@@ -301,7 +301,7 @@ export function BuildingDetail() {
             return (
               <div key={`${route.resource}-${route.to_building_id}-${i}`} className="route-item">
                 <span className="route-res" style={{ color: route.resource === "money" ? "var(--money)" : route.resource === "all" ? "var(--text-secondary)" : "var(--text-primary)" }}>
-                  {route.resource === "all" ? "all resources" : route.resource.replace(/_/g, " ")}
+                  {route.resource === "all" ? "all materials" : route.resource.replace(/_/g, " ")}
                 </span>
                 <span className="route-arrow">&rarr;</span>
                 <span className="route-dest">
