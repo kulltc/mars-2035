@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { connectMapWS } from "../api/client.js";
 import { useGameStore } from "../state/store.js";
-import type { Building, GameEvent, MarketPrices, Tile, Worker } from "@mars-2035/shared";
+import type { Building, GameEvent, MarketPrices, Tile, Worker, TaxInfo } from "@mars-2035/shared";
 
 interface SnapshotMessage {
   type: "snapshot";
@@ -11,6 +11,7 @@ interface SnapshotMessage {
   buildings: Building[];
   workers: Worker[];
   market_prices: MarketPrices;
+  tax_info?: TaxInfo;
 }
 
 interface EventsMessage {
@@ -20,6 +21,7 @@ interface EventsMessage {
   buildings: Building[];
   workers: Worker[];
   market_prices: MarketPrices;
+  tax_info?: TaxInfo;
 }
 
 type WSMessage = SnapshotMessage | EventsMessage;
@@ -58,6 +60,7 @@ export function useMapSubscription() {
   const setWorkers = useGameStore((s) => s.setWorkers);
   const addEvents = useGameStore((s) => s.addEvents);
   const setMarketPrices = useGameStore((s) => s.setMarketPrices);
+  const setTaxInfo = useGameStore((s) => s.setTaxInfo);
   const setWorld = useGameStore((s) => s.setWorld);
 
   useEffect(() => {
@@ -72,6 +75,7 @@ export function useMapSubscription() {
         setBuildings(msg.buildings);
         if (msg.workers) setWorkers(msg.workers);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
+        if (msg.tax_info) setTaxInfo(msg.tax_info);
         // Update tick from snapshot
         if (msg.tick) {
           const world = useGameStore.getState().world;
@@ -82,6 +86,7 @@ export function useMapSubscription() {
         setBuildings(msg.buildings);
         if (msg.workers) setWorkers(msg.workers);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
+        if (msg.tax_info) setTaxInfo(msg.tax_info);
         // Generate notifications for important events
         notifyForEvents(msg.events);
         // Update tick from events
@@ -99,5 +104,5 @@ export function useMapSubscription() {
       ws.close();
       wsRef.current = null;
     };
-  }, [currentMap, token, setTiles, setBuildings, setWorkers, addEvents, setMarketPrices, setWorld]);
+  }, [currentMap, token, setTiles, setBuildings, setWorkers, addEvents, setMarketPrices, setTaxInfo, setWorld]);
 }

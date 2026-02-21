@@ -1,7 +1,32 @@
 import type { FastifyInstance } from "fastify";
-import { toMapKey, type GameEvent, type Worker } from "@mars-2035/shared";
+import { toMapKey, TERRITORY_BUILDINGS, TAX_PER_BUILDING, type GameEvent, type Worker, type MapKey, type TaxInfo } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 import { filterStateForPlayer } from "./filterState.js";
+
+const TERRITORY_SET = new Set<string>(TERRITORY_BUILDINGS);
+
+function computeTaxInfo(store: WorldStore, mapKey: MapKey): TaxInfo {
+  const playerCounts = new Map<string, number>();
+  let total = 0;
+  for (const b of store.buildings.values()) {
+    if (b.map_key === mapKey && b.status === "active" && TERRITORY_SET.has(b.class)) {
+      playerCounts.set(b.owner_id, (playerCounts.get(b.owner_id) ?? 0) + 1);
+      total++;
+    }
+  }
+  const taxRate = total * TAX_PER_BUILDING;
+  const players: TaxInfo["players"] = [];
+  for (const [playerId, count] of playerCounts) {
+    const player = store.players.get(playerId);
+    players.push({
+      playerId,
+      name: player?.name ?? "Unknown",
+      buildings: count,
+      share: total > 0 ? count / total : 0,
+    });
+  }
+  return { taxRate, players };
+}
 
 export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
   app.get<{
@@ -47,6 +72,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
           buildings: filteredBuildings,
           workers: filteredWorkers,
           market_prices: store.marketPrices,
+          tax_info: computeTaxInfo(store, mapKey),
         })
       );
 
@@ -62,6 +88,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
               buildings: filtered.buildings,
               workers: filtered.workers,
               market_prices: store.marketPrices,
+              tax_info: computeTaxInfo(store, mapKey),
             })
           );
         }

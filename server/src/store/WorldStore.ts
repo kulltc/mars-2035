@@ -24,6 +24,8 @@ import {
   STARTING_MONEY,
   STARTING_WORKERS,
   WORKER_CAPACITY,
+  TERRITORY_BUILDINGS,
+  TAX_PER_BUILDING,
   tileKey,
 } from "@mars-2035/shared";
 import { generateWorld } from "../seed/worldGen.js";
@@ -59,6 +61,9 @@ export class WorldStore {
   // Task queue
   taskQueue = new Map<string, WorkerTask>();
   taskCounter = 0;
+
+  // Tax pool: accumulated tax per map during auto-sell, drained during processTaxes
+  taxPool = new Map<MapKey, number>();
 
   // WebSocket subscribers: mapKey → Set<callback>
   subscribers = new Map<MapKey, Set<(events: GameEvent[], buildings: Building[], workers: Worker[]) => void>>();
@@ -113,6 +118,17 @@ export class WorldStore {
       if (w.map_key === mapKey) result.push(w);
     }
     return result;
+  }
+
+  /** Count territory buildings on a map and return tax rate (0.001 per building) */
+  getTaxRate(mapKey: MapKey): number {
+    let count = 0;
+    for (const b of this.buildings.values()) {
+      if (b.map_key === mapKey && b.status === "active" && (TERRITORY_BUILDINGS as string[]).includes(b.class)) {
+        count++;
+      }
+    }
+    return count * TAX_PER_BUILDING;
   }
 
   getEventsSince(mapKey: MapKey, sinceSeq: number): GameEvent[] {

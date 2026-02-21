@@ -253,7 +253,8 @@ export type EventType =
   | "construction_complete"
   | "building_destroyed"
   | "processing"
-  | "research_complete";
+  | "research_complete"
+  | "tax_collected";
 
 export interface GameEvent {
   world_id: string;
@@ -292,6 +293,13 @@ export interface Command {
   type: CommandType;
   data: Record<string, unknown>;
   submitted_at: number;
+}
+
+// ── Tax ──
+
+export interface TaxInfo {
+  taxRate: number;
+  players: { playerId: string; name: string; buildings: number; share: number }[];
 }
 
 // ── Auth ──

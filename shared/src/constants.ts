@@ -2,6 +2,9 @@ import type { Assets, BuildingClass, MaterialType, ResourceType } from "./types.
 
 // ── Territory ──
 
+export const TERRITORY_BUILDINGS: BuildingClass[] = ["admin_outpost", "infra_tower", "research_station"];
+export const TAX_PER_BUILDING = 0.01;
+
 export const TERRITORY_RADIUS: Partial<Record<BuildingClass, number>> = {
   admin_outpost: 15,
   infra_tower: 8,

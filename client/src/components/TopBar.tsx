@@ -42,6 +42,7 @@ export function TopBar() {
   const toggleMainMenu = useGameStore((s) => s.toggleMainMenu);
   const showInventory = useGameStore((s) => s.showInventory);
   const toggleInventory = useGameStore((s) => s.toggleInventory);
+  const toggleTaxPanel = useGameStore((s) => s.toggleTaxPanel);
   const isMobile = useIsMobile();
 
   const [showForfeitConfirm, setShowForfeitConfirm] = useState(false);
@@ -220,19 +221,25 @@ export function TopBar() {
         </>
       )}
 
-      {/* Money + raw material pills (clickable for inventory) */}
-      <div
-        className="top-bar-resources"
-        ref={inventoryContainerRef}
-        onClick={toggleInventory}
-        title="Click to view full inventory"
-        style={{ cursor: "pointer" }}
-      >
-        <div className="resource-pill money" title="Money">
+      {/* Money pill (opens tax panel) + raw material pills (opens inventory) */}
+      <div className="top-bar-resources">
+        <div
+          className="resource-pill money"
+          title="Click to view tax info"
+          style={{ cursor: "pointer" }}
+          onClick={toggleTaxPanel}
+        >
           <span className="label">$</span>
           <span className="value">{money.toFixed(0)}</span>
         </div>
-        {resourcePills}
+        <div
+          ref={inventoryContainerRef}
+          onClick={toggleInventory}
+          title="Click to view full inventory"
+          style={{ cursor: "pointer", display: "flex", gap: 4 }}
+        >
+          {resourcePills}
+        </div>
       </div>
 
       {/* Right section */}

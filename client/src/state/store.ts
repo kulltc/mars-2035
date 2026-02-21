@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type {
   Player, Building, Tile, GameEvent, WorldMeta, MarketPrices, Worker, WorkerFilter,
-  BuildingClass,
+  BuildingClass, TaxInfo,
 } from "@mars-2035/shared";
 
 // ── Notification types ──
@@ -135,6 +135,12 @@ export interface GameState {
   toggleMainMenu: () => void;
   showInventory: boolean;
   toggleInventory: () => void;
+
+  // ── Tax panel ──
+  taxInfo: TaxInfo | null;
+  setTaxInfo: (info: TaxInfo | null) => void;
+  showTaxPanel: boolean;
+  toggleTaxPanel: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -283,4 +289,10 @@ export const useGameStore = create<GameState>((set) => ({
   toggleMainMenu: () => set((state) => ({ showMainMenu: !state.showMainMenu })),
   showInventory: false,
   toggleInventory: () => set((state) => ({ showInventory: !state.showInventory })),
+
+  // ── Tax panel ──
+  taxInfo: null,
+  setTaxInfo: (taxInfo) => set({ taxInfo }),
+  showTaxPanel: false,
+  toggleTaxPanel: () => set((state) => ({ showTaxPanel: !state.showTaxPanel })),
 }));

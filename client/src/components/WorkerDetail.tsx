@@ -45,6 +45,7 @@ export function WorkerDetail() {
   const addNotification = useGameStore((s) => s.addNotification);
 
   if (!selectedWorkerId) return null;
+  if (areaDrawMode) return null;
   const worker = workers.find((w) => w.entity_id === selectedWorkerId);
   if (!worker) return null;
 

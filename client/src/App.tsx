@@ -18,6 +18,7 @@ import { TileDetail } from "./components/TileDetail.js";
 import { MapSelector } from "./components/MapSelector.js";
 import { TutorialChecklist } from "./components/TutorialChecklist.js";
 import { SectorWelcomeModal } from "./components/SectorWelcomeModal.js";
+import { TaxPanel } from "./components/TaxPanel.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -34,6 +35,7 @@ export function App() {
   const showMarket = useGameStore((s) => s.showMarket);
   const showWorkers = useGameStore((s) => s.showWorkers);
   const showMapSelector = useGameStore((s) => s.showMapSelector);
+  const showTaxPanel = useGameStore((s) => s.showTaxPanel);
   const showBuildSheet = useGameStore((s) => s.showBuildSheet);
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
   const isMobile = useIsMobile();
@@ -118,6 +120,7 @@ export function App() {
         {showMarket && <MarketPanel />}
         {showTechTree && <TechTree />}
         {showWorkers && <WorkerListPanel />}
+        {showTaxPanel && <TaxPanel />}
         <TutorialChecklist />
       </div>
       {isMobile ? (

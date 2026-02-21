@@ -299,7 +299,9 @@ body {
   font-weight: 600;
   box-shadow: 0 0 20px rgba(239, 83, 80, 0.3);
   animation: fadeIn 0.2s ease-out;
-  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ── Build Toolbar ── */
@@ -1022,7 +1024,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -1035,6 +1038,9 @@ body {
   cursor: pointer;
   transition: background 0.1s;
   font-size: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .worker-row:hover { background: var(--bg-hover); }
 
@@ -1611,4 +1617,86 @@ body {
   color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 16px;
+}
+
+/* ── Tax Panel ── */
+.tax-panel {
+  width: min(400px, 90vw);
+}
+
+.tax-rate-display {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+
+.tax-rate-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.tax-rate-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--money);
+}
+
+.tax-player-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.tax-player-table th {
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.tax-player-table td {
+  padding: 6px 8px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.tax-player-table td:last-child,
+.tax-player-table th:last-child {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.tax-player-table td:nth-child(2),
+.tax-player-table th:nth-child(2) {
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.tax-no-buildings {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tax-explanation {
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }

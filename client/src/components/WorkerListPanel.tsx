@@ -1,6 +1,6 @@
 import React from "react";
 import { useGameStore } from "../state/store.js";
-import { totalInventory, type WorkerState } from "@mars-2035/shared";
+import { type WorkerState } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
 
 const STATE_LABELS: Record<WorkerState, string> = {
@@ -35,7 +35,7 @@ export function WorkerListPanel() {
       style={{ position: "absolute", inset: 0 }}
       onClick={(e) => { if (e.target === e.currentTarget) toggleWorkers(); }}
     >
-      <div className="modal-content" style={{ maxWidth: 520 }}>
+      <div className="modal-content" style={{ maxWidth: 520, height: "80vh", display: "flex", flexDirection: "column" }}>
         <div className="modal-header">
           <span className="modal-title">Workers ({activeCount}/{myWorkers.length} active)</span>
           <button className="modal-close" onClick={toggleWorkers}>&times;</button>
@@ -47,10 +47,14 @@ export function WorkerListPanel() {
           </div>
         ) : (
           <div className="worker-list">
-            {myWorkers.map((w) => {
+            {myWorkers.map((w, i) => {
               const isActive = w.worker_status === "active";
               const invEntries = Object.entries(w.inventory).filter(([, v]) => v && v > 0);
-              const shortId = w.entity_id.slice(-6);
+
+              const area = w.task_filter?.area;
+              const areaLabel = area
+                ? `(${area.x1},${area.y1})-(${area.x2},${area.y2})`
+                : "All";
 
               return (
                 <div
@@ -59,6 +63,7 @@ export function WorkerListPanel() {
                   onClick={() => {
                     setSelectedWorkerId(w.entity_id);
                     setSelectedTile(null);
+                    setCameraTarget({ x: w.x, y: w.y });
                     toggleWorkers();
                   }}
                 >
@@ -69,11 +74,8 @@ export function WorkerListPanel() {
                         background: isActive ? "var(--success)" : "var(--danger)",
                       }}
                     />
-                    <span className="mono" style={{ fontSize: 10, color: "var(--text-muted)" }}>
-                      {shortId}
-                    </span>
-                    <span className="mono" style={{ fontSize: 10, color: "var(--text-muted)" }}>
-                      ({w.x},{w.y})
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 600 }}>
+                      {i + 1}
                     </span>
                     <span style={{ fontSize: 11, color: "var(--accent)" }}>
                       {STATE_LABELS[w.state] ?? w.state}
@@ -81,36 +83,31 @@ export function WorkerListPanel() {
                   </div>
 
                   {invEntries.length > 0 && (
-                    <div style={{ fontSize: 10, color: "var(--text-secondary)", marginRight: 8, whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)", marginRight: 4, overflow: "hidden", textOverflow: "ellipsis" }}>
                       {invEntries.map(([mat, amt]) => `${(amt as number).toFixed(0)} ${mat.replace(/_/g, " ")}`).join(", ")}
                     </div>
                   )}
 
-                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className="btn btn-sm btn-accent"
-                      onClick={() => {
-                        setCameraTarget({ x: w.x, y: w.y });
-                        toggleWorkers();
-                      }}
-                    >
-                      Locate
-                    </button>
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={async () => {
-                        if (!confirm("Remove this worker?")) return;
-                        const res = await submitCommand("remove_worker", { worker_id: w.entity_id });
-                        if (res.error) {
-                          addNotification(`Remove failed: ${res.error}`, "error");
-                        } else {
-                          addNotification("Worker removed", "warning");
-                        }
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
+                  <span className="mono" style={{ fontSize: 9, color: "var(--text-muted)", flexShrink: 0 }}>
+                    {areaLabel}
+                  </span>
+
+                  <button
+                    className="btn btn-sm"
+                    style={{ flexShrink: 0, padding: "0 4px", fontSize: 14, lineHeight: 1 }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm("Remove this worker?")) return;
+                      const res = await submitCommand("remove_worker", { worker_id: w.entity_id });
+                      if (res.error) {
+                        addNotification(`Remove failed: ${res.error}`, "error");
+                      } else {
+                        addNotification("Worker removed", "warning");
+                      }
+                    }}
+                  >
+                    &times;
+                  </button>
                 </div>
               );
             })}

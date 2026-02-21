@@ -21,11 +21,19 @@ export function processAutoSell(store: WorldStore) {
         continue;
       }
 
-      // Sell all available from both storages, credit money to port
-      const revenue = Math.round(available * price * 100) / 100;
+      // Sell all available from both storages, credit money to port (minus tax)
+      const grossRevenue = Math.round(available * price * 100) / 100;
+      const taxRate = store.getTaxRate(building.map_key);
+      const taxAmount = Math.round(grossRevenue * taxRate * 100) / 100;
+      const revenue = grossRevenue - taxAmount;
       if (building.output_buffer) building.output_buffer[res] = 0;
       building.inventory[res] = 0;
       building.inventory.money = (building.inventory.money ?? 0) + revenue;
+
+      // Accumulate tax into per-map pool
+      if (taxAmount > 0) {
+        store.taxPool.set(building.map_key, (store.taxPool.get(building.map_key) ?? 0) + taxAmount);
+      }
 
       // Supply pressure
       store.supplyPressure[res] = (store.supplyPressure[res] ?? 0) + available;
