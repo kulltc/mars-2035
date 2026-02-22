@@ -20,6 +20,7 @@ import { TutorialChecklist } from "./components/TutorialChecklist.js";
 import { SectorWelcomeModal } from "./components/SectorWelcomeModal.js";
 import { TaxPanel } from "./components/TaxPanel.js";
 import { ProtectionEndedModal } from "./components/ProtectionEndedModal.js";
+import { BankruptModal } from "./components/BankruptModal.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -39,6 +40,9 @@ export function App() {
   const showTaxPanel = useGameStore((s) => s.showTaxPanel);
   const showProtectionEndedModal = useGameStore((s) => s.showProtectionEndedModal);
   const closeProtectionEndedModal = useGameStore((s) => s.closeProtectionEndedModal);
+  const showBankruptModal = useGameStore((s) => s.showBankruptModal);
+  const openBankruptModal = useGameStore((s) => s.openBankruptModal);
+  const closeBankruptModal = useGameStore((s) => s.closeBankruptModal);
   const showBuildSheet = useGameStore((s) => s.showBuildSheet);
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
   const isMobile = useIsMobile();
@@ -98,6 +102,13 @@ export function App() {
     prevMapAccountCountRef.current = mapAccountCount;
   }, [player]);
 
+  // Show bankrupt modal when player is flagged bankrupt
+  useEffect(() => {
+    if (player?.bankrupt) {
+      openBankruptModal();
+    }
+  }, [player?.bankrupt]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!world) {
     return (
       <div className="login-screen">
@@ -150,6 +161,14 @@ export function App() {
       )}
       {showProtectionEndedModal && (
         <ProtectionEndedModal onClose={closeProtectionEndedModal} />
+      )}
+      {showBankruptModal && (
+        <BankruptModal onStartOver={() => {
+          closeBankruptModal();
+          if (player) {
+            setPlayer({ ...player, bankrupt: undefined });
+          }
+        }} />
       )}
     </div>
   );

@@ -156,6 +156,11 @@ export interface GameState {
   showProtectionEndedModal: boolean;
   openProtectionEndedModal: () => void;
   closeProtectionEndedModal: () => void;
+
+  // ── Bankruptcy modal ──
+  showBankruptModal: boolean;
+  openBankruptModal: () => void;
+  closeBankruptModal: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -332,4 +337,9 @@ export const useGameStore = create<GameState>((set) => ({
   showProtectionEndedModal: false,
   openProtectionEndedModal: () => set({ showProtectionEndedModal: true }),
   closeProtectionEndedModal: () => set({ showProtectionEndedModal: false }),
+
+  // ── Bankruptcy modal ──
+  showBankruptModal: false,
+  openBankruptModal: () => set({ showBankruptModal: true }),
+  closeBankruptModal: () => set({ showBankruptModal: false }),
 }));

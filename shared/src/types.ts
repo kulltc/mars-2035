@@ -231,6 +231,7 @@ export interface Player {
   map_accounts: Record<MapKey, MapAccount>;
   research: string[];
   tutorial_step?: number;
+  bankrupt?: boolean;
 }
 
 // ── Ambassador ──
@@ -278,7 +279,8 @@ export type EventType =
   | "new_player_protection_ended"
   | "ambassador_dispatched"
   | "ambassador_arrived"
-  | "ambassador_returned";
+  | "ambassador_returned"
+  | "player_bankrupt";
 
 export interface GameEvent {
   world_id: string;

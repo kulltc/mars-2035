@@ -77,6 +77,25 @@ function notifyForEvents(events: GameEvent[]) {
         }
         break;
       }
+      case "player_bankrupt": {
+        const bankruptPlayerId = evt.data.player_id as string | undefined;
+        if (bankruptPlayerId && currentPlayerId && bankruptPlayerId === currentPlayerId) {
+          // Refresh player state — the tick already reset map_accounts/research
+          const player = state.player;
+          if (player) {
+            state.setPlayer({
+              ...player,
+              bankrupt: true,
+              map_accounts: {},
+              research: [],
+              tutorial_step: 1,
+              buildings: [],
+            });
+          }
+          state.openBankruptModal();
+        }
+        break;
+      }
       // Suppress routine events: production, routes, market updates, ticks, etc.
     }
   }

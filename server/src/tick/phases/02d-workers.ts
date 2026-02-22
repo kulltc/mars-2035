@@ -251,16 +251,28 @@ export function processWorkers(store: WorldStore) {
         const outpost = outpostId ? store.buildings.get(outpostId) : undefined;
         if (!outpost) { worker.state = "idle"; break; }
 
-        // Dump all inventory into admin outpost (always accept — it's home base)
+        // Dump inventory into admin outpost; money always accepted,
+        // materials capped by remaining capacity (excess is destroyed)
         let totalDumped = 0;
         let moneyDumped = 0;
+        let remaining = remainingCapacity(outpost.inventory, outpost.capacity);
         for (const key of Object.keys(worker.inventory) as MaterialType[]) {
           const amount = worker.inventory[key] ?? 0;
           if (amount <= 0) continue;
           worker.inventory[key] = 0;
-          outpost.inventory[key] = (outpost.inventory[key] ?? 0) + amount;
-          if (key === "money") moneyDumped += amount;
-          totalDumped += amount;
+          if (key === "money") {
+            outpost.inventory[key] = (outpost.inventory[key] ?? 0) + amount;
+            moneyDumped += amount;
+            totalDumped += amount;
+          } else {
+            const accepted = Math.min(amount, remaining);
+            if (accepted > 0) {
+              outpost.inventory[key] = (outpost.inventory[key] ?? 0) + accepted;
+              remaining -= accepted;
+              totalDumped += accepted;
+            }
+            // any excess beyond capacity is destroyed
+          }
         }
 
         if (moneyDumped > 0) {

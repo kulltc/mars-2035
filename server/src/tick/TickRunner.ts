@@ -12,6 +12,7 @@ import { processAmbassadors } from "./phases/02e-ambassadors.js";
 import { processSalesTaxHistory } from "./phases/02f-salesTaxHistory.js";
 import { processCommit } from "./phases/05-commit.js";
 import { processTutorial } from "./phases/06-tutorial.js";
+import { processBankruptcy } from "./phases/07-bankruptcy.js";
 import { saveSnapshot } from "../db.js";
 
 export class TickRunner {
@@ -63,7 +64,9 @@ export class TickRunner {
     processTaxes(this.store);
     // 8. Advance tutorial progress
     processTutorial(this.store);
-    // 9. Broadcast events to WS clients
+    // 9. Bankruptcy check — auto-forfeit players with only admin outpost and $0
+    processBankruptcy(this.store);
+    // 10. Broadcast events to WS clients
     processCommit(this.store);
 
     const elapsed = (performance.now() - t0).toFixed(1);

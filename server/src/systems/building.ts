@@ -247,6 +247,8 @@ export function placeBuilding(
     account.admin_outpost_building_id = entityId;
     account.started_at_tick = store.tick;
     account.new_player_protection_active = true;
+    // Clear bankrupt flag on restart
+    if (player.bankrupt) delete player.bankrupt;
     // Spawn starting workers
     for (let i = 0; i < STARTING_WORKERS; i++) {
       spawnWorker(store, player.entity_id, mapKey, location.x, location.y);
