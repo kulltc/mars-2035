@@ -23,7 +23,7 @@ const BUILDING_ICONS: Record<string, string> = {
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
   quantum_relay: "⬢",
-  ambassadors_office: "♛",
+  embassy: "♛",
 };
 
 const BUILDING_COLORS: Record<string, string> = {
@@ -38,11 +38,11 @@ const BUILDING_COLORS: Record<string, string> = {
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
   quantum_relay: "#64b5f6",
-  ambassadors_office: "#ff8a65",
+  embassy: "#ff8a65",
 };
 
 const BUILD_SECTIONS: { label: string; color: string; items: BuildingClass[] }[] = [
-  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "infra_tower", "research_lab", "research_station", "mine", "port", "quantum_relay", "ambassadors_office"] },
+  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "infra_tower", "research_lab", "research_station", "mine", "port", "quantum_relay", "embassy"] },
   { label: "Morphic", color: "#e65100", items: ["smelter", "magnetic_press", "morphic_forge", "servo_assembly", "replication_chamber"] },
   { label: "Toroidin", color: "#7b1fa2", items: ["polymer_kiln", "crystal_grower", "toroidin_foundry", "muphrid_lab", "solar_loom"] },
   { label: "Cryogenic", color: "#00838f", items: ["cryo_distillery", "phase_condenser", "xenotherm_reactor", "deep_freeze_synth", "iceworld_refinery"] },

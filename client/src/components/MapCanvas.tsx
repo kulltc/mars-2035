@@ -46,7 +46,7 @@ const BUILDING_COLORS: Record<string, string> = {
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
   quantum_relay: "#64b5f6",
-  ambassadors_office: "#ff8a65",
+  embassy: "#ff8a65",
 };
 
 const BUILDING_ICONS: Record<string, string> = {
@@ -61,7 +61,7 @@ const BUILDING_ICONS: Record<string, string> = {
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
   quantum_relay: "⬢",
-  ambassadors_office: "♛",
+  embassy: "♛",
 };
 
 export const DISPLAY_NAMES: Record<string, string> = {
@@ -76,7 +76,7 @@ export const DISPLAY_NAMES: Record<string, string> = {
   resonance_tuner: "Resonance Tuner", neural_loom: "Neural Loom", psychophysical_amp: "Psychophysical Amp",
   dampening_forge: "Dampening Forge", consciousness_engine: "Consciousness Engine",
   quantum_relay: "Quantum Relay",
-  ambassadors_office: "Ambassadors Office",
+  embassy: "Embassy",
 };
 
 function isInForeignTerritory(

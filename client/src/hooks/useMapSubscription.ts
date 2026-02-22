@@ -28,6 +28,9 @@ interface EventsMessage {
 
 type WSMessage = SnapshotMessage | EventsMessage;
 
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
+
 /** Event types that generate user-visible notifications */
 function notifyForEvents(events: GameEvent[]) {
   const state = useGameStore.getState();
@@ -103,6 +106,9 @@ function notifyForEvents(events: GameEvent[]) {
 
 export function useMapSubscription() {
   const wsRef = useRef<WebSocket | null>(null);
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attemptRef = useRef(0);
+  const cancelledRef = useRef(false);
   const currentMap = useGameStore((s) => s.currentMap);
   const token = useGameStore((s) => s.token);
   const setTiles = useGameStore((s) => s.setTiles);
@@ -117,9 +123,12 @@ export function useMapSubscription() {
   useEffect(() => {
     if (!currentMap || !token) return;
 
+    cancelledRef.current = false;
+    attemptRef.current = 0;
+
     const { dx, dy, mx, my } = currentMap;
 
-    const ws = connectMapWS(dx, dy, mx, my, (raw) => {
+    function handleMessage(raw: unknown) {
       const msg = raw as WSMessage;
       if (msg.type === "snapshot") {
         setTiles(msg.tiles);
@@ -149,13 +158,63 @@ export function useMapSubscription() {
           if (world) setWorld({ ...world, tick: tickEvt.tick });
         }
       }
-    });
+    }
 
-    wsRef.current = ws;
+    function connect() {
+      if (cancelledRef.current) return;
+
+      const ws = connectMapWS(dx, dy, mx, my, handleMessage);
+
+      ws.onopen = () => {
+        attemptRef.current = 0;
+        // Hide modal if it was showing from a previous disconnect
+        useGameStore.getState().closeConnectionLostModal();
+      };
+
+      ws.onclose = () => {
+        if (cancelledRef.current) return;
+        useGameStore.getState().openConnectionLostModal();
+        scheduleReconnect();
+      };
+
+      ws.onerror = () => {
+        // onclose will fire after onerror, so reconnect is handled there
+      };
+
+      wsRef.current = ws;
+    }
+
+    function scheduleReconnect() {
+      if (cancelledRef.current) return;
+
+      if (attemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        return;
+      }
+
+      const delay = RECONNECT_DELAYS[attemptRef.current] ?? RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1];
+      attemptRef.current++;
+
+      retryRef.current = setTimeout(() => {
+        if (!cancelledRef.current) {
+          connect();
+        }
+      }, delay);
+    }
+
+    connect();
 
     return () => {
-      ws.close();
-      wsRef.current = null;
+      cancelledRef.current = true;
+      if (retryRef.current) {
+        clearTimeout(retryRef.current);
+        retryRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, [currentMap, token, setTiles, setBuildings, setWorkers, setAmbassadors, addEvents, setMarketPrices, setTaxInfo, setWorld]);
 }

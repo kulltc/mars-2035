@@ -23,7 +23,7 @@ const BUILDING_COLORS: Record<string, string> = {
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
   quantum_relay: "#64b5f6",
-  ambassadors_office: "#ff8a65",
+  embassy: "#ff8a65",
 };
 
 const BUILDING_ICONS: Record<string, string> = {
@@ -37,7 +37,7 @@ const BUILDING_ICONS: Record<string, string> = {
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
   quantum_relay: "⬢",
-  ambassadors_office: "♛",
+  embassy: "♛",
 };
 
 const RELAY_MATERIALS: MaterialType[] = MATERIAL_TYPES.filter((m) => m !== "money");
@@ -723,8 +723,8 @@ export function BuildingDetail() {
         </div>
       )}
 
-      {/* Ambassadors Office panel */}
-      {building.class === "ambassadors_office" && (() => {
+      {/* Embassy panel */}
+      {building.class === "embassy" && (() => {
         const ambassadors = useGameStore.getState().ambassadors.filter(
           (a) => a.office_building_id === building.entity_id
         );

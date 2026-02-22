@@ -28,7 +28,8 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "import",
   "forfeit",
   "dismiss_tutorial",
-  "send_ambassador"
+  "send_ambassador",
+  "acknowledge_bankrupt"
 ]);
 
 let commandCounter = 0;

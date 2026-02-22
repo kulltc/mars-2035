@@ -213,8 +213,8 @@ export function processWorkers(store: WorldStore) {
             owner_id: building.owner_id,
           }, worker.map_key);
 
-          // Spawn ambassador when ambassadors_office finishes
-          if (building.class === "ambassadors_office") {
+          // Spawn ambassador when embassy finishes
+          if (building.class === "embassy") {
             const ambId = `amb_${++store.ambassadorCounter}`;
             store.ambassadors.set(ambId, {
               entity_id: ambId,

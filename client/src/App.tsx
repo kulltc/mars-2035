@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useGameStore } from "./state/store.js";
 import { useMapSubscription } from "./hooks/useMapSubscription.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
-import { fetchWorld, fetchPlayer, getMe } from "./api/client.js";
+import { fetchWorld, fetchPlayer, getMe, submitCommand } from "./api/client.js";
 import { LoginScreen } from "./components/LoginScreen.js";
 import { MapCanvas } from "./components/MapCanvas.js";
 import { TopBar } from "./components/TopBar.js";
@@ -21,6 +21,7 @@ import { SectorWelcomeModal } from "./components/SectorWelcomeModal.js";
 import { TaxPanel } from "./components/TaxPanel.js";
 import { ProtectionEndedModal } from "./components/ProtectionEndedModal.js";
 import { BankruptModal } from "./components/BankruptModal.js";
+import { ConnectionLostModal } from "./components/ConnectionLostModal.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -43,6 +44,7 @@ export function App() {
   const showBankruptModal = useGameStore((s) => s.showBankruptModal);
   const openBankruptModal = useGameStore((s) => s.openBankruptModal);
   const closeBankruptModal = useGameStore((s) => s.closeBankruptModal);
+  const showConnectionLostModal = useGameStore((s) => s.showConnectionLostModal);
   const showBuildSheet = useGameStore((s) => s.showBuildSheet);
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
   const isMobile = useIsMobile();
@@ -94,7 +96,7 @@ export function App() {
       mapAccountCount === 0 &&
       player.tutorial_step === 1;
 
-    if (isIntroState && (switchedPlayer || justForfeited)) {
+    if (isIntroState && !player.bankrupt && (switchedPlayer || justForfeited)) {
       setShowSectorWelcome(true);
     }
 
@@ -135,7 +137,7 @@ export function App() {
         {showTechTree && <TechTree />}
         {showWorkers && <WorkerListPanel />}
         {showTaxPanel && <TaxPanel />}
-        <TutorialChecklist />
+        {!player.bankrupt && <TutorialChecklist />}
       </div>
       {isMobile ? (
         <>
@@ -162,11 +164,13 @@ export function App() {
       {showProtectionEndedModal && (
         <ProtectionEndedModal onClose={closeProtectionEndedModal} />
       )}
+      {showConnectionLostModal && <ConnectionLostModal />}
       {showBankruptModal && (
         <BankruptModal onStartOver={() => {
           closeBankruptModal();
           if (player) {
             setPlayer({ ...player, bankrupt: undefined });
+            submitCommand("acknowledge_bankrupt", {});
           }
         }} />
       )}

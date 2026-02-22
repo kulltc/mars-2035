@@ -74,8 +74,8 @@ export const RESEARCH_TREE: Record<string, ResearchDef> = {
     track: "offensive_diplomacy",
     cost: { ferrite_alloy: 8, thermoplast: 5 },
     requires: [],
-    description: "Unlock Ambassadors Office. Max claim: \u00B110%.",
-    unlocks: "ambassadors_office",
+    description: "Unlock Embassy. Max claim: \u00B110%.",
+    unlocks: "embassy",
   },
   foreign_affairs_2: {
     id: "foreign_affairs_2",

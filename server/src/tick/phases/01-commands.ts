@@ -442,8 +442,8 @@ function handleSellBuilding(store: WorldStore, player: Player, data: Record<stri
     }
   }
 
-  // Remove ambassadors belonging to this building (if ambassadors_office)
-  if (building.class === "ambassadors_office") {
+  // Remove ambassadors belonging to this building (if embassy)
+  if (building.class === "embassy") {
     for (const [ambId, amb] of store.ambassadors) {
       if (amb.office_building_id === building_id) {
         store.ambassadors.delete(ambId);
@@ -772,7 +772,7 @@ function handleSendAmbassador(store: WorldStore, player: Player, data: Record<st
 
   const office = store.buildings.get(office_building_id);
   if (!office) return { ok: false, error: "Office not found" };
-  if (office.class !== "ambassadors_office") return { ok: false, error: "Not an Ambassadors Office" };
+  if (office.class !== "embassy") return { ok: false, error: "Not an Embassy" };
   if (office.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
   if (office.status !== "active") return { ok: false, error: "Office not active" };
 
@@ -823,6 +823,11 @@ function handleDismissTutorial(_store: WorldStore, player: Player, _data: Record
   return { ok: true, events: [] };
 }
 
+function handleAcknowledgeBankrupt(_store: WorldStore, player: Player, _data: Record<string, unknown>): HandlerResult {
+  if (player.bankrupt) delete player.bankrupt;
+  return { ok: true, events: [] };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -844,6 +849,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   forfeit: handleForfeit,
   dismiss_tutorial: handleDismissTutorial,
   send_ambassador: handleSendAmbassador,
+  acknowledge_bankrupt: handleAcknowledgeBankrupt,
 };
 
 // ── Main processor ──

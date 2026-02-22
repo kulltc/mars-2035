@@ -104,7 +104,7 @@ export const BUILDING_CLASSES = [
   "dampening_forge",
   "consciousness_engine",
   "quantum_relay",
-  "ambassadors_office",
+  "embassy",
 ] as const;
 
 export type BuildingClass = (typeof BUILDING_CLASSES)[number];
@@ -312,7 +312,8 @@ export type CommandType =
   | "import"
   | "forfeit"
   | "dismiss_tutorial"
-  | "send_ambassador";
+  | "send_ambassador"
+  | "acknowledge_bankrupt";
 
 export interface Command {
   id: string;

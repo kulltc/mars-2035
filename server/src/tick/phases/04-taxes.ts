@@ -57,6 +57,7 @@ export function processTaxes(store: WorldStore) {
     let total = 0;
     for (const b of store.buildings.values()) {
       if (b.map_key === mapKey && b.status === "active" && TERRITORY_SET.has(b.class)) {
+        if (store.isNewPlayerProtectionActive(b.owner_id, b.map_key)) continue;
         playerBuildings.set(b.owner_id, (playerBuildings.get(b.owner_id) ?? 0) + 1);
         total++;
       }

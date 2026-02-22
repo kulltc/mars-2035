@@ -161,6 +161,11 @@ export interface GameState {
   showBankruptModal: boolean;
   openBankruptModal: () => void;
   closeBankruptModal: () => void;
+
+  // ── Connection lost modal ──
+  showConnectionLostModal: boolean;
+  openConnectionLostModal: () => void;
+  closeConnectionLostModal: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -342,4 +347,9 @@ export const useGameStore = create<GameState>((set) => ({
   showBankruptModal: false,
   openBankruptModal: () => set({ showBankruptModal: true }),
   closeBankruptModal: () => set({ showBankruptModal: false }),
+
+  // ── Connection lost modal ──
+  showConnectionLostModal: false,
+  openConnectionLostModal: () => set({ showConnectionLostModal: true }),
+  closeConnectionLostModal: () => set({ showConnectionLostModal: false }),
 }));
