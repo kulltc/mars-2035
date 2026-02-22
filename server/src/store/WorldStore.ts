@@ -12,6 +12,7 @@ import {
   type ResourceType,
   type Worker,
   type WorkerTask,
+  type Ambassador,
   TICK_INTERVAL_MS,
   DISTRICTS_X,
   DISTRICTS_Y,
@@ -26,6 +27,7 @@ import {
   WORKER_CAPACITY,
   TERRITORY_BUILDINGS,
   TAX_PER_BUILDING,
+  NEW_PLAYER_PROTECTION_TICKS,
   tileKey,
 } from "@mars-2035/shared";
 import { generateWorld } from "../seed/worldGen.js";
@@ -62,11 +64,17 @@ export class WorldStore {
   taskQueue = new Map<string, WorkerTask>();
   taskCounter = 0;
 
+  // Ambassadors
+  ambassadors = new Map<string, Ambassador>();
+  ambassadorCounter = 0;
+  salesTaxHistory = new Map<string, number[]>(); // playerId → last 5 tick sums
+  currentTickSalesTax = new Map<string, number>(); // transient, reset each tick
+
   // Tax pool: accumulated tax per map during auto-sell, drained during processTaxes
   taxPool = new Map<MapKey, number>();
 
   // WebSocket subscribers: mapKey → Set<callback>
-  subscribers = new Map<MapKey, Set<(events: GameEvent[], buildings: Building[], workers: Worker[]) => void>>();
+  subscribers = new Map<MapKey, Set<(events: GameEvent[], buildings: Building[], workers: Worker[], ambassadors: Ambassador[]) => void>>();
 
   constructor(seed = 42) {
     this.tiles = generateWorld(seed);
@@ -112,6 +120,14 @@ export class WorldStore {
     return result;
   }
 
+  getAmbassadorsByMap(mapKey: MapKey): Ambassador[] {
+    const result: Ambassador[] = [];
+    for (const a of this.ambassadors.values()) {
+      if (a.map_key === mapKey) result.push(a);
+    }
+    return result;
+  }
+
   getWorkersByMap(mapKey: MapKey): Worker[] {
     const result: Worker[] = [];
     for (const w of this.workers.values()) {
@@ -129,6 +145,13 @@ export class WorldStore {
       }
     }
     return count * TAX_PER_BUILDING;
+  }
+
+  isNewPlayerProtectionActive(playerId: string, mapKey: MapKey): boolean {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    const account = player.map_accounts[mapKey];
+    return account?.new_player_protection_active === true;
   }
 
   getEventsSince(mapKey: MapKey, sinceSeq: number): GameEvent[] {
@@ -152,7 +175,7 @@ export class WorldStore {
 
   // ── Subscription management ──
 
-  subscribe(mapKey: MapKey, cb: (events: GameEvent[], buildings: Building[], workers: Worker[]) => void): () => void {
+  subscribe(mapKey: MapKey, cb: (events: GameEvent[], buildings: Building[], workers: Worker[], ambassadors: Ambassador[]) => void): () => void {
     let subs = this.subscribers.get(mapKey);
     if (!subs) {
       subs = new Set();
@@ -162,10 +185,10 @@ export class WorldStore {
     return () => subs!.delete(cb);
   }
 
-  broadcast(mapKey: MapKey, events: GameEvent[], buildings: Building[], workers: Worker[]) {
+  broadcast(mapKey: MapKey, events: GameEvent[], buildings: Building[], workers: Worker[], ambassadors: Ambassador[]) {
     const subs = this.subscribers.get(mapKey);
     if (subs) {
-      for (const cb of subs) cb(events, buildings, workers);
+      for (const cb of subs) cb(events, buildings, workers, ambassadors);
     }
   }
 
@@ -180,6 +203,10 @@ export class WorldStore {
     for (const [k, v] of this.workers) workers[k] = v;
     const taskQueue: Record<string, WorkerTask> = {};
     for (const [k, v] of this.taskQueue) taskQueue[k] = v;
+    const ambassadors: Record<string, Ambassador> = {};
+    for (const [k, v] of this.ambassadors) ambassadors[k] = v;
+    const salesTaxHistory: Record<string, number[]> = {};
+    for (const [k, v] of this.salesTaxHistory) salesTaxHistory[k] = [...v];
     return {
       tick: this.tick, seq: this.seq, players, buildings,
       marketPrices: this.marketPrices,
@@ -187,6 +214,9 @@ export class WorldStore {
       workers,
       taskQueue,
       taskCounter: this.taskCounter,
+      ambassadors,
+      ambassadorCounter: this.ambassadorCounter,
+      salesTaxHistory,
     };
   }
 
@@ -199,6 +229,20 @@ export class WorldStore {
     // Migration: backfill research array for existing players
     for (const player of store.players.values()) {
       if (!player.research) player.research = [];
+      for (const account of Object.values(player.map_accounts)) {
+        if (account.started_at_tick == null) {
+          account.started_at_tick = store.tick;
+        }
+        if (account.new_player_protection_active == null) {
+          account.new_player_protection_active = false;
+        }
+        if (
+          account.new_player_protection_active &&
+          store.tick - account.started_at_tick >= NEW_PLAYER_PROTECTION_TICKS
+        ) {
+          account.new_player_protection_active = false;
+        }
+      }
     }
     store.buildings = new Map(Object.entries(payload.buildings));
 
@@ -237,6 +281,21 @@ export class WorldStore {
     }
     if (payload.taskCounter) {
       store.taskCounter = payload.taskCounter;
+    }
+
+    // Restore ambassadors
+    if (payload.ambassadors) {
+      store.ambassadors = new Map(Object.entries(payload.ambassadors));
+      // Migration: ensure cooldown_ticks exists
+      for (const a of store.ambassadors.values()) {
+        if (a.cooldown_ticks == null) a.cooldown_ticks = 0;
+      }
+    }
+    if (payload.ambassadorCounter) {
+      store.ambassadorCounter = payload.ambassadorCounter;
+    }
+    if (payload.salesTaxHistory) {
+      store.salesTaxHistory = new Map(Object.entries(payload.salesTaxHistory));
     }
 
     // Re-link buildings to tiles

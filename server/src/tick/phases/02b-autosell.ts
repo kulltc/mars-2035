@@ -23,7 +23,9 @@ export function processAutoSell(store: WorldStore) {
 
       // Sell all available from both storages, credit money to port (minus tax)
       const grossRevenue = Math.round(available * price * 100) / 100;
-      const taxRate = store.getTaxRate(building.map_key);
+      const taxRate = store.isNewPlayerProtectionActive(building.owner_id, building.map_key)
+        ? 0
+        : store.getTaxRate(building.map_key);
       const taxAmount = Math.round(grossRevenue * taxRate * 100) / 100;
       const revenue = grossRevenue - taxAmount;
       if (building.output_buffer) building.output_buffer[res] = 0;
@@ -33,6 +35,9 @@ export function processAutoSell(store: WorldStore) {
       // Accumulate tax into per-map pool
       if (taxAmount > 0) {
         store.taxPool.set(building.map_key, (store.taxPool.get(building.map_key) ?? 0) + taxAmount);
+        // Track per-player sales tax for ambassador calculations
+        const prev = store.currentTickSalesTax.get(building.owner_id) ?? 0;
+        store.currentTickSalesTax.set(building.owner_id, prev + taxAmount);
       }
 
       // Supply pressure

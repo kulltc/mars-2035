@@ -23,6 +23,7 @@ const BUILDING_COLORS: Record<string, string> = {
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
   quantum_relay: "#64b5f6",
+  ambassadors_office: "#ff8a65",
 };
 
 const BUILDING_ICONS: Record<string, string> = {
@@ -36,6 +37,7 @@ const BUILDING_ICONS: Record<string, string> = {
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
   quantum_relay: "⬢",
+  ambassadors_office: "♛",
 };
 
 const RELAY_MATERIALS: MaterialType[] = MATERIAL_TYPES.filter((m) => m !== "money");
@@ -721,15 +723,61 @@ export function BuildingDetail() {
         </div>
       )}
 
+      {/* Ambassadors Office panel */}
+      {building.class === "ambassadors_office" && (() => {
+        const ambassadors = useGameStore.getState().ambassadors.filter(
+          (a) => a.office_building_id === building.entity_id
+        );
+        const setAmbassadorTargetMode = useGameStore.getState().setAmbassadorTargetMode;
+        return (
+          <div className="bd-section">
+            <div className="bd-section-title">Ambassador</div>
+            {ambassadors.length === 0 ? (
+              <div className="route-hint">No ambassador stationed yet</div>
+            ) : ambassadors.map((amb) => (
+              <div key={amb.entity_id} style={{ fontSize: 12, marginBottom: 8 }}>
+                <div>
+                  Status: <strong style={{ color: amb.state === "idle" ? "var(--success)" : "var(--warning)" }}>
+                    {amb.state.replace(/_/g, " ")}
+                  </strong>
+                </div>
+                {amb.state === "returning" && amb.carried_money > 0 && (
+                  <div style={{ color: "var(--money)" }}>
+                    Carrying: ${amb.carried_money.toFixed(1)}
+                  </div>
+                )}
+                {amb.state === "idle" && amb.cooldown_ticks > 0 && (
+                  <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
+                    Cooldown: {amb.cooldown_ticks} ticks
+                  </div>
+                )}
+                {amb.state === "idle" && amb.cooldown_ticks <= 0 && (
+                  <button
+                    className="btn btn-accent btn-sm"
+                    style={{ marginTop: 4 }}
+                    onClick={() => {
+                      setAmbassadorTargetMode(building.entity_id);
+                      addNotification("Click a rival building to send ambassador", "info");
+                    }}
+                  >
+                    Send Ambassador
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Research panel (research_lab only) */}
       {building.class === "research_lab" && player && (
         <div className="bd-section">
           <div className="bd-section-title">Research</div>
-          {(["diplomacy", "logistics"] as const).map((track) => {
+          {(["diplomacy", "logistics", "offensive_diplomacy"] as const).map((track) => {
             const items = Object.values(RESEARCH_TREE).filter((r) => r.track === track);
             return (
               <div key={track} className="research-track">
-                <div className="research-track-title">{track === "diplomacy" ? "\u25B8 DIPLOMACY" : "\u25B8 LOGISTICS"}</div>
+                <div className="research-track-title">{"\u25B8 " + track.replace(/_/g, " ").toUpperCase()}</div>
                 {items.map((res, idx) => {
                   const completed = player.research?.includes(res.id);
                   const prereqsMet = res.requires.every((r) => player.research?.includes(r));

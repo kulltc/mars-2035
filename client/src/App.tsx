@@ -19,6 +19,7 @@ import { MapSelector } from "./components/MapSelector.js";
 import { TutorialChecklist } from "./components/TutorialChecklist.js";
 import { SectorWelcomeModal } from "./components/SectorWelcomeModal.js";
 import { TaxPanel } from "./components/TaxPanel.js";
+import { ProtectionEndedModal } from "./components/ProtectionEndedModal.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -36,6 +37,8 @@ export function App() {
   const showWorkers = useGameStore((s) => s.showWorkers);
   const showMapSelector = useGameStore((s) => s.showMapSelector);
   const showTaxPanel = useGameStore((s) => s.showTaxPanel);
+  const showProtectionEndedModal = useGameStore((s) => s.showProtectionEndedModal);
+  const closeProtectionEndedModal = useGameStore((s) => s.closeProtectionEndedModal);
   const showBuildSheet = useGameStore((s) => s.showBuildSheet);
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
   const isMobile = useIsMobile();
@@ -144,6 +147,9 @@ export function App() {
           tiles={tiles}
           onClose={() => setShowSectorWelcome(false)}
         />
+      )}
+      {showProtectionEndedModal && (
+        <ProtectionEndedModal onClose={closeProtectionEndedModal} />
       )}
     </div>
   );

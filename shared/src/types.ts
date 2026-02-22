@@ -104,6 +104,7 @@ export const BUILDING_CLASSES = [
   "dampening_forge",
   "consciousness_engine",
   "quantum_relay",
+  "ambassadors_office",
 ] as const;
 
 export type BuildingClass = (typeof BUILDING_CLASSES)[number];
@@ -219,6 +220,8 @@ export type PlayerStatus = "active" | "inactive";
 
 export interface MapAccount {
   admin_outpost_building_id?: string;
+  started_at_tick?: number;
+  new_player_protection_active?: boolean;
 }
 
 export interface Player {
@@ -228,6 +231,23 @@ export interface Player {
   map_accounts: Record<MapKey, MapAccount>;
   research: string[];
   tutorial_step?: number;
+}
+
+// ── Ambassador ──
+
+export type AmbassadorState = "idle" | "moving_to_target" | "returning";
+
+export interface Ambassador {
+  entity_id: string;
+  owner_id: string;
+  office_building_id: string;
+  map_key: MapKey;
+  x: number;
+  y: number;
+  state: AmbassadorState;
+  target_building_id?: string;
+  carried_money: number;
+  cooldown_ticks: number;
 }
 
 // ── Events ──
@@ -254,7 +274,11 @@ export type EventType =
   | "building_destroyed"
   | "processing"
   | "research_complete"
-  | "tax_collected";
+  | "tax_collected"
+  | "new_player_protection_ended"
+  | "ambassador_dispatched"
+  | "ambassador_arrived"
+  | "ambassador_returned";
 
 export interface GameEvent {
   world_id: string;
@@ -285,7 +309,8 @@ export type CommandType =
   | "delete_quantum_rule"
   | "import"
   | "forfeit"
-  | "dismiss_tutorial";
+  | "dismiss_tutorial"
+  | "send_ambassador";
 
 export interface Command {
   id: string;

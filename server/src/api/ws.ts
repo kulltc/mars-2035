@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { toMapKey, TERRITORY_BUILDINGS, TAX_PER_BUILDING, type GameEvent, type Worker, type MapKey, type TaxInfo } from "@mars-2035/shared";
+import { toMapKey, TERRITORY_BUILDINGS, TAX_PER_BUILDING, type GameEvent, type Worker, type Ambassador, type MapKey, type TaxInfo } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 import { filterStateForPlayer } from "./filterState.js";
 
@@ -62,8 +62,8 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
 
       // Send initial snapshot (filtered per player)
       const tiles = store.serializeTiles(mapKey);
-      const { buildings: filteredBuildings, workers: filteredWorkers } =
-        filterStateForPlayer(playerId, store.getBuildingsByMap(mapKey), store.getWorkersByMap(mapKey));
+      const { buildings: filteredBuildings, workers: filteredWorkers, ambassadors: filteredAmbassadors } =
+        filterStateForPlayer(playerId, store.getBuildingsByMap(mapKey), store.getWorkersByMap(mapKey), store.getAmbassadorsByMap(mapKey));
       socket.send(
         JSON.stringify({
           type: "snapshot",
@@ -72,15 +72,16 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
           tiles,
           buildings: filteredBuildings,
           workers: filteredWorkers,
+          ambassadors: filteredAmbassadors,
           market_prices: store.marketPrices,
           tax_info: computeTaxInfo(store, mapKey),
         })
       );
 
       // Subscribe to map events (filtered per player)
-      const unsub = store.subscribe(mapKey, (events: GameEvent[], buildings, workers: Worker[]) => {
+      const unsub = store.subscribe(mapKey, (events: GameEvent[], buildings, workers: Worker[], ambassadors: Ambassador[]) => {
         if (socket.readyState === 1) {
-          const filtered = filterStateForPlayer(playerId, buildings, workers);
+          const filtered = filterStateForPlayer(playerId, buildings, workers, ambassadors);
           socket.send(
             JSON.stringify({
               type: "events",
@@ -88,6 +89,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
               events,
               buildings: filtered.buildings,
               workers: filtered.workers,
+              ambassadors: filtered.ambassadors,
               market_prices: store.marketPrices,
               tax_info: computeTaxInfo(store, mapKey),
             })

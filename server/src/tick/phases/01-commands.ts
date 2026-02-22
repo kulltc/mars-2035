@@ -442,6 +442,15 @@ function handleSellBuilding(store: WorldStore, player: Player, data: Record<stri
     }
   }
 
+  // Remove ambassadors belonging to this building (if ambassadors_office)
+  if (building.class === "ambassadors_office") {
+    for (const [ambId, amb] of store.ambassadors) {
+      if (amb.office_building_id === building_id) {
+        store.ambassadors.delete(ambId);
+      }
+    }
+  }
+
   // Clear tile
   const mapTiles = store.tiles.get(building.map_key);
   if (mapTiles) {
@@ -704,6 +713,13 @@ function handleForfeit(store: WorldStore, player: Player, _data: Record<string, 
     store.workers.delete(wid);
   }
 
+  // Remove all ambassadors belonging to this player
+  for (const [ambId, amb] of store.ambassadors) {
+    if (amb.owner_id !== playerId) continue;
+    store.ambassadors.delete(ambId);
+  }
+  store.salesTaxHistory.delete(playerId);
+
   // Remove all buildings belonging to this player
   const buildingIds: string[] = [];
   for (const [bid, building] of store.buildings) {
@@ -748,6 +764,60 @@ function handleForfeit(store: WorldStore, player: Player, _data: Record<string, 
   };
 }
 
+function handleSendAmbassador(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { office_building_id, target_building_id } = data as {
+    office_building_id: string;
+    target_building_id: string;
+  };
+
+  const office = store.buildings.get(office_building_id);
+  if (!office) return { ok: false, error: "Office not found" };
+  if (office.class !== "ambassadors_office") return { ok: false, error: "Not an Ambassadors Office" };
+  if (office.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+  if (office.status !== "active") return { ok: false, error: "Office not active" };
+
+  // Find an idle ambassador at this office (not on cooldown)
+  let ambassador: import("@mars-2035/shared").Ambassador | undefined;
+  for (const a of store.ambassadors.values()) {
+    if (a.office_building_id === office_building_id && a.state === "idle" && a.cooldown_ticks <= 0) {
+      ambassador = a;
+      break;
+    }
+  }
+  if (!ambassador) return { ok: false, error: "No idle ambassador available (may be on cooldown)" };
+
+  const target = store.buildings.get(target_building_id);
+  if (!target) return { ok: false, error: "Target building not found" };
+  if (target.map_key !== office.map_key) return { ok: false, error: "Target must be on same map" };
+  if (target.owner_id === player.entity_id) return { ok: false, error: "Cannot target your own building" };
+
+  // Check new player protection
+  if (store.isNewPlayerProtectionActive(target.owner_id, target.map_key)) {
+    return { ok: false, error: "Target player is under new player protection" };
+  }
+  if (store.isNewPlayerProtectionActive(player.entity_id, office.map_key)) {
+    return { ok: false, error: "You are under new player protection" };
+  }
+
+  ambassador.state = "moving_to_target";
+  ambassador.target_building_id = target_building_id;
+
+  return {
+    ok: true,
+    events: [{
+      type: "ambassador_dispatched",
+      data: {
+        ambassador_id: ambassador.entity_id,
+        owner_id: player.entity_id,
+        office_building_id,
+        target_building_id,
+        target_owner_id: target.owner_id,
+      },
+      mapKey: office.map_key,
+    }],
+  };
+}
+
 function handleDismissTutorial(_store: WorldStore, player: Player, _data: Record<string, unknown>): HandlerResult {
   player.tutorial_step = undefined;
   return { ok: true, events: [] };
@@ -773,6 +843,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   delete_quantum_rule: handleDeleteQuantumRule,
   forfeit: handleForfeit,
   dismiss_tutorial: handleDismissTutorial,
+  send_ambassador: handleSendAmbassador,
 };
 
 // ── Main processor ──

@@ -8,6 +8,8 @@ import { processQuantumRelays } from "./phases/02c-quantum.js";
 import { processWorkers } from "./phases/02d-workers.js";
 import { processUpkeep } from "./phases/03-upkeep.js";
 import { processTaxes } from "./phases/04-taxes.js";
+import { processAmbassadors } from "./phases/02e-ambassadors.js";
+import { processSalesTaxHistory } from "./phases/02f-salesTaxHistory.js";
 import { processCommit } from "./phases/05-commit.js";
 import { processTutorial } from "./phases/06-tutorial.js";
 import { saveSnapshot } from "../db.js";
@@ -53,7 +55,11 @@ export class TickRunner {
     processWorkers(this.store);
     // 7. Ports auto-sell resources at market price
     processAutoSell(this.store);
-    // 7b. Distribute accumulated tax revenue to territory building owners
+    // 7b. Roll sales tax history for ambassador calculations
+    processSalesTaxHistory(this.store);
+    // 7c. Ambassador movement & cash logic
+    processAmbassadors(this.store);
+    // 7d. Distribute accumulated tax revenue to territory building owners
     processTaxes(this.store);
     // 8. Advance tutorial progress
     processTutorial(this.store);

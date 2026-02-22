@@ -27,7 +27,8 @@ export function processCommit(store: WorldStore) {
     const allEvents = [...events, ...globalEvents];
     const buildings = store.getBuildingsByMap(mapKey);
     const workers = store.getWorkersByMap(mapKey);
-    for (const cb of subs) cb(allEvents, buildings, workers);
+    const ambassadors = store.getAmbassadorsByMap(mapKey);
+    for (const cb of subs) cb(allEvents, buildings, workers, ambassadors);
   }
 
   // Prune old events to prevent unbounded memory growth

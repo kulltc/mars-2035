@@ -212,6 +212,23 @@ export function processWorkers(store: WorldStore) {
             building_class: building.class,
             owner_id: building.owner_id,
           }, worker.map_key);
+
+          // Spawn ambassador when ambassadors_office finishes
+          if (building.class === "ambassadors_office") {
+            const ambId = `amb_${++store.ambassadorCounter}`;
+            store.ambassadors.set(ambId, {
+              entity_id: ambId,
+              owner_id: building.owner_id,
+              office_building_id: building.entity_id,
+              map_key: building.map_key,
+              x: building.location.x,
+              y: building.location.y,
+              state: "idle",
+              carried_money: 0,
+              cooldown_ticks: 0,
+            });
+          }
+
           clearWorkerTask(store, worker);
           worker.state = "idle";
         }

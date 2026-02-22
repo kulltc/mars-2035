@@ -46,6 +46,7 @@ const BUILDING_COLORS: Record<string, string> = {
   resonance_tuner: "#ad1457", neural_loom: "#880e4f", psychophysical_amp: "#6a0037",
   dampening_forge: "#560027", consciousness_engine: "#3e001f",
   quantum_relay: "#64b5f6",
+  ambassadors_office: "#ff8a65",
 };
 
 const BUILDING_ICONS: Record<string, string> = {
@@ -60,6 +61,7 @@ const BUILDING_ICONS: Record<string, string> = {
   resonance_tuner: "♬", neural_loom: "∿", psychophysical_amp: "Ψ",
   dampening_forge: "⊟", consciousness_engine: "◎",
   quantum_relay: "⬢",
+  ambassadors_office: "♛",
 };
 
 export const DISPLAY_NAMES: Record<string, string> = {
@@ -74,6 +76,7 @@ export const DISPLAY_NAMES: Record<string, string> = {
   resonance_tuner: "Resonance Tuner", neural_loom: "Neural Loom", psychophysical_amp: "Psychophysical Amp",
   dampening_forge: "Dampening Forge", consciousness_engine: "Consciousness Engine",
   quantum_relay: "Quantum Relay",
+  ambassadors_office: "Ambassadors Office",
 };
 
 function isInForeignTerritory(
@@ -585,6 +588,52 @@ export function MapCanvas() {
         ctx.stroke();
       }
 
+      // ── Draw ambassadors ──
+      const ambAlpha = state.ambassadorUpdateAt > 0
+        ? Math.min(1, (now - state.ambassadorUpdateAt) / TICK_INTERVAL_MS)
+        : 1;
+
+      for (const amb of state.ambassadors) {
+        const isMoving = amb.state === "moving_to_target" || amb.state === "returning";
+        const prev = state.ambassadorPrevPositions.get(amb.entity_id);
+        let ax = amb.x, ay = amb.y;
+        if (isMoving && prev) {
+          ax = lerp(prev.x, amb.x, ambAlpha);
+          ay = lerp(prev.y, amb.y, ambAlpha);
+        }
+        const asx = (ax - cam.x) * ts + ts / 2;
+        const asy = (ay - cam.y) * ts + ts / 2;
+        if (asx < -ts || asx > w + ts || asy < -ts || asy > h + ts) continue;
+
+        const isOwn = amb.owner_id === playerId;
+        const radius = Math.max(4, ts * 0.14);
+
+        // Draw diamond shape
+        ctx.beginPath();
+        ctx.moveTo(asx, asy - radius);
+        ctx.lineTo(asx + radius, asy);
+        ctx.lineTo(asx, asy + radius);
+        ctx.lineTo(asx - radius, asy);
+        ctx.closePath();
+        ctx.fillStyle = isOwn ? "#ff8a65" : "#ef5350";
+        ctx.fill();
+        ctx.strokeStyle = isOwn ? "#fff" : "rgba(255,255,255,0.4)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Pulsing glow for moving ambassadors
+        if (isMoving) {
+          const pulse = 0.3 + 0.2 * Math.sin(now / 300);
+          ctx.globalAlpha = pulse;
+          ctx.beginPath();
+          ctx.arc(asx, asy, radius + 3, 0, Math.PI * 2);
+          ctx.strokeStyle = isOwn ? "#ff8a65" : "#ef5350";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+
       // ── Selection highlight ──
       if (state.selectedTile) {
         const sx = (state.selectedTile.x - cam.x) * ts;
@@ -827,6 +876,31 @@ export function MapCanvas() {
       // This was a click (no drag)
       setTooltip(null);
 
+      // Ambassador targeting mode
+      if (state.ambassadorTargetMode && state.player) {
+        const tile = screenToTile(sx, sy);
+        const targetBuilding = state.buildings.find(
+          (b) => b.location.x === tile.x && b.location.y === tile.y
+        );
+        if (targetBuilding && targetBuilding.owner_id !== state.player.entity_id) {
+          submitCommand("send_ambassador", {
+            office_building_id: state.ambassadorTargetMode,
+            target_building_id: targetBuilding.entity_id,
+          }).then((res) => {
+            if (res.error) {
+              state.addNotification(`Ambassador failed: ${res.error}`, "error");
+            } else {
+              state.addNotification("Ambassador dispatched!", "success");
+            }
+          });
+          state.setAmbassadorTargetMode(null);
+        } else {
+          state.addNotification("Select a rival building", "warning");
+        }
+        mouseActionRef.current = { type: "idle" };
+        return;
+      }
+
       if (state.buildMode && state.player && state.currentMap) {
         // Place building
         const tile = screenToTile(sx, sy);
@@ -976,6 +1050,7 @@ export function MapCanvas() {
         state.setBuildMode(null);
         state.setAreaDrawMode(null);
         state.setRoutePickerTarget(null);
+        state.setAmbassadorTargetMode(null);
         mouseActionRef.current = { type: "idle" };
         routeDragEndRef.current = null;
       }
@@ -1123,6 +1198,32 @@ export function MapCanvas() {
         const pos = touchStartRef.current;
         const state = storeRef.current;
 
+        // Ambassador targeting mode (touch)
+        if (state.ambassadorTargetMode && state.player) {
+          const tile = screenToTile(pos.x, pos.y);
+          const targetBuilding = state.buildings.find(
+            (b) => b.location.x === tile.x && b.location.y === tile.y
+          );
+          if (targetBuilding && targetBuilding.owner_id !== state.player.entity_id) {
+            submitCommand("send_ambassador", {
+              office_building_id: state.ambassadorTargetMode,
+              target_building_id: targetBuilding.entity_id,
+            }).then((res) => {
+              if (res.error) {
+                state.addNotification(`Ambassador failed: ${res.error}`, "error");
+              } else {
+                state.addNotification("Ambassador dispatched!", "success");
+              }
+            });
+            state.setAmbassadorTargetMode(null);
+          } else {
+            state.addNotification("Select a rival building", "warning");
+          }
+          touchModeRef.current = "idle";
+          mouseActionRef.current = { type: "idle" };
+          return;
+        }
+
         if (state.buildMode && state.player && state.currentMap) {
           const tile = screenToTile(pos.x, pos.y);
           if (tile.x >= 0 && tile.y >= 0 && tile.x < TILES_PER_MAP && tile.y < TILES_PER_MAP) {
@@ -1250,6 +1351,7 @@ export function MapCanvas() {
   let cursor = "grab";
   if (state.buildMode) cursor = "crosshair";
   else if (state.areaDrawMode) cursor = "crosshair";
+  else if (state.ambassadorTargetMode) cursor = "crosshair";
   else if (mouseActionRef.current.type === "panning") cursor = "grabbing";
 
   return (
@@ -1299,6 +1401,25 @@ export function MapCanvas() {
           >
             &#x2715;
           </button>
+        </div>
+      )}
+
+      {/* Ambassador targeting banner */}
+      {state.ambassadorTargetMode && (
+        <div className="build-mode-indicator">
+          <span className="build-mode-label">
+            Select a rival building to send ambassador
+          </span>
+          {isMobile ? (
+            <button
+              className="build-mode-cancel"
+              onClick={() => state.setAmbassadorTargetMode(null)}
+            >
+              &#x2715;
+            </button>
+          ) : (
+            <span> — Click rival building, Esc to cancel</span>
+          )}
         </div>
       )}
 

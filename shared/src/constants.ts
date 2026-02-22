@@ -26,6 +26,7 @@ export const TILES_PER_MAP = 300;
 // ── Tick ──
 
 export const TICK_INTERVAL_MS = 1000; // 5s for dev
+export const NEW_PLAYER_PROTECTION_TICKS = 3600 * 24;
 
 // ── Building definitions ──
 
@@ -46,12 +47,12 @@ export interface BuildingDef {
 }
 
 export const BUILDING_DEFS: Record<BuildingClass, BuildingDef> = {
-  admin_outpost: { upkeep_per_tick: 0, cost: {}, capacity: 2000, build_ticks: 0 },
+  admin_outpost: { upkeep_per_tick: 1, cost: {}, capacity: 2000, build_ticks: 0 },
   infra_tower: { upkeep_per_tick: 1.0, cost: { money: 500, steel: 50 }, capacity: 100, build_ticks: 10 },
   research_lab: { upkeep_per_tick: 0.5, cost: { money: 300 }, capacity: 100, build_ticks: 8 },
-  research_station: { upkeep_per_tick: 1.5, cost: { money: 1000 }, capacity: 50, build_ticks: 15 },
-  mine: { upkeep_per_tick: 0.2, cost: { money: 100 }, capacity: 50, production_per_tick: 2, build_ticks: 3 },
-  port: { upkeep_per_tick: 0.3, cost: { money: 150 }, capacity: 200, build_ticks: 5 },
+  research_station: { upkeep_per_tick: 1.5, cost: { money: 1000, rare_earth: 100 }, capacity: 50, build_ticks: 15 },
+  mine: { upkeep_per_tick: 0.5, cost: { money: 100 }, capacity: 50, production_per_tick: 2, build_ticks: 3 },
+  port: { upkeep_per_tick: 0.8, cost: { money: 150 }, capacity: 200, build_ticks: 5 },
   // Morphic Chain
   smelter:              { upkeep_per_tick: 0.4, cost: { money: 200 },  capacity: 80, build_ticks: 5,  output_capacity: 40, recipe: { inputs: { steel: 3, carbon: 2 }, output: "ferrite_alloy", output_amount: 2 } },
   magnetic_press:       { upkeep_per_tick: 0.6, cost: { money: 400 },  capacity: 60, build_ticks: 8,  output_capacity: 30, recipe: { inputs: { ferrite_alloy: 2, steel: 1 }, output: "morphic_composite", output_amount: 1 } },
@@ -77,7 +78,14 @@ export const BUILDING_DEFS: Record<BuildingClass, BuildingDef> = {
   dampening_forge:      { upkeep_per_tick: 1.6, cost: { money: 1600 }, capacity: 30, build_ticks: 18, output_capacity: 15, recipe: { inputs: { psychon_core: 1, rare_earth: 3 }, output: "peep_shield", output_amount: 1 } },
   consciousness_engine: { upkeep_per_tick: 2.8, cost: { money: 3200 }, capacity: 20, build_ticks: 25, output_capacity: 10, recipe: { inputs: { peep_shield: 1, psychon_core: 1 }, output: "noetic_matrix", output_amount: 1 } },
   quantum_relay:        { upkeep_per_tick: 4.0, cost: { money: 2000, morphic_core: 2, xenotherm_crystal: 2, autonomic_matrix: 1, zero_point_shard: 1 }, capacity: 120, build_ticks: 35 },
+  ambassadors_office:   { upkeep_per_tick: 1.0, cost: { money: 800, ferrite_alloy: 5 }, capacity: 200, build_ticks: 12 },
 };
+
+// ── Ambassadors ──
+
+export const AMBASSADOR_MAX_PERCENT_BY_TIER = [0.10, 0.30, 0.50]; // tiers 1-3
+export const SALES_TAX_HISTORY_LENGTH = 5;
+export const AMBASSADOR_COOLDOWN_TICKS = 600; // cooldown after a successful trip
 
 // ── Market ──
 

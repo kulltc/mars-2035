@@ -235,12 +235,18 @@ export function placeBuilding(
 
   // Ensure player has a map account
   if (!player.map_accounts[mapKey]) {
-    player.map_accounts[mapKey] = {};
+    player.map_accounts[mapKey] = {
+      started_at_tick: store.tick,
+      new_player_protection_active: false,
+    };
   }
 
   // Link admin outpost
   if (buildingClass === "admin_outpost") {
-    player.map_accounts[mapKey].admin_outpost_building_id = entityId;
+    const account = player.map_accounts[mapKey];
+    account.admin_outpost_building_id = entityId;
+    account.started_at_tick = store.tick;
+    account.new_player_protection_active = true;
     // Spawn starting workers
     for (let i = 0; i < STARTING_WORKERS; i++) {
       spawnWorker(store, player.entity_id, mapKey, location.x, location.y);

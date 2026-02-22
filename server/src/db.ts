@@ -16,6 +16,9 @@ export interface WorldSnapshotPayload {
   workers?: Record<string, import("@mars-2035/shared").Worker>;
   taskQueue?: Record<string, import("@mars-2035/shared").WorkerTask>;
   taskCounter?: number;
+  ambassadors?: Record<string, import("@mars-2035/shared").Ambassador>;
+  ambassadorCounter?: number;
+  salesTaxHistory?: Record<string, number[]>;
 }
 
 export async function initDb() {

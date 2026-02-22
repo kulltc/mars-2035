@@ -3,7 +3,7 @@ import type { Assets, BuildingClass } from "./types.js";
 export interface ResearchDef {
   id: string;
   name: string;
-  track: "diplomacy" | "logistics";
+  track: "diplomacy" | "logistics" | "offensive_diplomacy";
   cost: Assets;
   requires: string[];
   description: string;
@@ -66,6 +66,32 @@ export const RESEARCH_TREE: Record<string, ResearchDef> = {
     requires: ["storage_workers"],
     description: "Unlock Quantum Relay construction for instant cross-sector material routing.",
     unlocks: "quantum_relay",
+  },
+  // Offensive Diplomacy track
+  foreign_affairs_1: {
+    id: "foreign_affairs_1",
+    name: "Foreign Affairs I",
+    track: "offensive_diplomacy",
+    cost: { ferrite_alloy: 8, thermoplast: 5 },
+    requires: [],
+    description: "Unlock Ambassadors Office. Max claim: \u00B110%.",
+    unlocks: "ambassadors_office",
+  },
+  foreign_affairs_2: {
+    id: "foreign_affairs_2",
+    name: "Foreign Affairs II",
+    track: "offensive_diplomacy",
+    cost: { morphic_composite: 5, null_phase_gel: 5 },
+    requires: ["foreign_affairs_1"],
+    description: "Increase max embassy claim to \u00B130%.",
+  },
+  foreign_affairs_3: {
+    id: "foreign_affairs_3",
+    name: "Foreign Affairs III",
+    track: "offensive_diplomacy",
+    cost: { morphic_core: 3, xenotherm_crystal: 3 },
+    requires: ["foreign_affairs_2"],
+    description: "Increase max embassy claim to \u00B150%.",
   },
 };
 

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type {
   Player, Building, Tile, GameEvent, WorldMeta, MarketPrices, Worker, WorkerFilter,
-  BuildingClass, TaxInfo,
+  BuildingClass, TaxInfo, Ambassador,
 } from "@mars-2035/shared";
 
 // ── Notification types ──
@@ -72,6 +72,16 @@ export interface GameState {
   workerPrevPositions: Map<string, { x: number; y: number }>;
   workerUpdateAt: number;
 
+  // Ambassadors on current map
+  ambassadors: Ambassador[];
+  setAmbassadors: (ambassadors: Ambassador[]) => void;
+  ambassadorPrevPositions: Map<string, { x: number; y: number }>;
+  ambassadorUpdateAt: number;
+
+  // Ambassador targeting mode
+  ambassadorTargetMode: string | null; // office_building_id when in targeting mode
+  setAmbassadorTargetMode: (officeId: string | null) => void;
+
   // Selected worker
   selectedWorkerId: string | null;
   setSelectedWorkerId: (id: string | null) => void;
@@ -141,6 +151,11 @@ export interface GameState {
   setTaxInfo: (info: TaxInfo | null) => void;
   showTaxPanel: boolean;
   toggleTaxPanel: () => void;
+
+  // ── New player protection modal ──
+  showProtectionEndedModal: boolean;
+  openProtectionEndedModal: () => void;
+  closeProtectionEndedModal: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -208,6 +223,23 @@ export const useGameStore = create<GameState>((set) => ({
     }),
   workerPrevPositions: new Map(),
   workerUpdateAt: 0,
+
+  // ── Ambassadors ──
+  ambassadors: [],
+  setAmbassadors: (ambassadors) =>
+    set((state) => {
+      const prev = new Map<string, { x: number; y: number }>();
+      for (const a of state.ambassadors) {
+        prev.set(a.entity_id, { x: a.x, y: a.y });
+      }
+      return { ambassadors, ambassadorPrevPositions: prev, ambassadorUpdateAt: Date.now() };
+    }),
+  ambassadorPrevPositions: new Map(),
+  ambassadorUpdateAt: 0,
+
+  // ── Ambassador targeting ──
+  ambassadorTargetMode: null,
+  setAmbassadorTargetMode: (ambassadorTargetMode) => set({ ambassadorTargetMode }),
 
   // ── Selection ──
   selectedWorkerId: null,
@@ -295,4 +327,9 @@ export const useGameStore = create<GameState>((set) => ({
   setTaxInfo: (taxInfo) => set({ taxInfo }),
   showTaxPanel: false,
   toggleTaxPanel: () => set((state) => ({ showTaxPanel: !state.showTaxPanel })),
+
+  // ── New player protection modal ──
+  showProtectionEndedModal: false,
+  openProtectionEndedModal: () => set({ showProtectionEndedModal: true }),
+  closeProtectionEndedModal: () => set({ showProtectionEndedModal: false }),
 }));

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { connectMapWS } from "../api/client.js";
 import { useGameStore } from "../state/store.js";
-import type { Building, GameEvent, MarketPrices, Tile, Worker, TaxInfo } from "@mars-2035/shared";
+import type { Building, GameEvent, MarketPrices, Tile, Worker, TaxInfo, Ambassador } from "@mars-2035/shared";
 
 interface SnapshotMessage {
   type: "snapshot";
@@ -10,6 +10,7 @@ interface SnapshotMessage {
   tiles: Tile[];
   buildings: Building[];
   workers: Worker[];
+  ambassadors?: Ambassador[];
   market_prices: MarketPrices;
   tax_info?: TaxInfo;
 }
@@ -20,6 +21,7 @@ interface EventsMessage {
   events: GameEvent[];
   buildings: Building[];
   workers: Worker[];
+  ambassadors?: Ambassador[];
   market_prices: MarketPrices;
   tax_info?: TaxInfo;
 }
@@ -28,7 +30,11 @@ type WSMessage = SnapshotMessage | EventsMessage;
 
 /** Event types that generate user-visible notifications */
 function notifyForEvents(events: GameEvent[]) {
-  const addNotification = useGameStore.getState().addNotification;
+  const state = useGameStore.getState();
+  const addNotification = state.addNotification;
+  const openProtectionEndedModal = state.openProtectionEndedModal;
+  const currentPlayerId = state.player?.entity_id;
+
   for (const evt of events) {
     switch (evt.type) {
       case "command_failed":
@@ -46,6 +52,31 @@ function notifyForEvents(events: GameEvent[]) {
       case "construction_complete":
         addNotification("Construction complete!", "success");
         break;
+      case "new_player_protection_ended": {
+        const playerId = evt.data.player_id as string | undefined;
+        if (playerId && currentPlayerId && playerId === currentPlayerId) {
+          openProtectionEndedModal();
+        }
+        break;
+      }
+      case "ambassador_arrived": {
+        const ownerId = evt.data.owner_id as string | undefined;
+        const carried = evt.data.carried_money as number | undefined;
+        const targetOwnerId = evt.data.target_owner_id as string | undefined;
+        if (ownerId === currentPlayerId && carried && carried > 0) {
+          addNotification(`Ambassador collected $${carried.toFixed(1)}!`, "success");
+        } else if (targetOwnerId === currentPlayerId && carried && carried > 0) {
+          addNotification(`An ambassador took $${carried.toFixed(1)} from your building!`, "warning");
+        } else if (ownerId === currentPlayerId) {
+          const pct = evt.data.pct as number | undefined;
+          if (pct != null && pct < 0) {
+            addNotification(`Ambassador had to pay — your economy is weaker`, "warning");
+          } else {
+            addNotification(`Ambassador arrived — no cash exchanged`, "info");
+          }
+        }
+        break;
+      }
       // Suppress routine events: production, routes, market updates, ticks, etc.
     }
   }
@@ -61,6 +92,7 @@ export function useMapSubscription() {
   const addEvents = useGameStore((s) => s.addEvents);
   const setMarketPrices = useGameStore((s) => s.setMarketPrices);
   const setTaxInfo = useGameStore((s) => s.setTaxInfo);
+  const setAmbassadors = useGameStore((s) => s.setAmbassadors);
   const setWorld = useGameStore((s) => s.setWorld);
 
   useEffect(() => {
@@ -74,6 +106,7 @@ export function useMapSubscription() {
         setTiles(msg.tiles);
         setBuildings(msg.buildings);
         if (msg.workers) setWorkers(msg.workers);
+        if (msg.ambassadors) setAmbassadors(msg.ambassadors);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
         if (msg.tax_info) setTaxInfo(msg.tax_info);
         // Update tick from snapshot
@@ -85,6 +118,7 @@ export function useMapSubscription() {
         addEvents(msg.events);
         setBuildings(msg.buildings);
         if (msg.workers) setWorkers(msg.workers);
+        if (msg.ambassadors) setAmbassadors(msg.ambassadors);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
         if (msg.tax_info) setTaxInfo(msg.tax_info);
         // Generate notifications for important events
@@ -104,5 +138,5 @@ export function useMapSubscription() {
       ws.close();
       wsRef.current = null;
     };
-  }, [currentMap, token, setTiles, setBuildings, setWorkers, addEvents, setMarketPrices, setTaxInfo, setWorld]);
+  }, [currentMap, token, setTiles, setBuildings, setWorkers, setAmbassadors, addEvents, setMarketPrices, setTaxInfo, setWorld]);
 }
