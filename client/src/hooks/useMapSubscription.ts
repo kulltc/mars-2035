@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { connectMapWS } from "../api/client.js";
+import { connectMapWS, fetchMap } from "../api/client.js";
 import { useGameStore } from "../state/store.js";
 import type { Building, GameEvent, MarketPrices, Tile, Worker, TaxInfo, Ambassador } from "@mars-2035/shared";
 
@@ -7,7 +7,7 @@ interface SnapshotMessage {
   type: "snapshot";
   map_key: string;
   tick: number;
-  tiles: Tile[];
+  tiles?: Tile[];
   buildings: Building[];
   workers: Worker[];
   ambassadors?: Ambassador[];
@@ -128,10 +128,32 @@ export function useMapSubscription() {
 
     const { dx, dy, mx, my } = currentMap;
 
+    // Fetch tiles via REST (static data, only need to load once per map)
+    let tilesFetched = false;
+    function fetchTiles() {
+      if (tilesFetched) return;
+      tilesFetched = true;
+      fetchMap(dx, dy, mx, my)
+        .then((data) => {
+          if (!cancelledRef.current) {
+            setTiles(data.tiles);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch tiles:", err);
+          tilesFetched = false; // allow retry
+        });
+    }
+
     function handleMessage(raw: unknown) {
       const msg = raw as WSMessage;
       if (msg.type === "snapshot") {
-        setTiles(msg.tiles);
+        // Tiles come from REST, not WS — fetch once
+        if (msg.tiles) {
+          setTiles(msg.tiles);
+        } else {
+          fetchTiles();
+        }
         setBuildings(msg.buildings);
         if (msg.workers) setWorkers(msg.workers);
         if (msg.ambassadors) setAmbassadors(msg.ambassadors);

@@ -9,15 +9,16 @@ import {
   STARTING_MONEY,
   STARTING_WORKERS,
   TERRITORY_RADIUS,
+  TILES_PER_MAP,
   WORKER_CAPACITY,
   locationToMapKey,
-  tileKey,
   getTerritoryInfo,
   type TerritoryBuilding,
   getResearchForBuilding,
   RESEARCH_TREE,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
+import { getResourceTile } from "../db.js";
 
 let buildingCounter = 0;
 
@@ -50,18 +51,24 @@ export function spawnWorker(store: WorldStore, ownerId: string, mapKey: string, 
   return worker;
 }
 
-export function placeBuilding(
+export async function placeBuilding(
   store: WorldStore,
   player: Player,
   buildingClass: BuildingClass,
   location: Location,
   initialStatus: Building["status"] = "active"
-): { ok: true; building: Building } | { ok: false; error: string } {
+): Promise<{ ok: true; building: Building } | { ok: false; error: string }> {
   const mapKey = locationToMapKey(location);
-  const tile = store.getTile(mapKey, location.x, location.y);
 
-  if (!tile) return { ok: false, error: "Invalid tile coordinates" };
-  if (tile.building_id) return { ok: false, error: "Tile already has a building" };
+  // Validate coordinates are in-bounds
+  if (location.x < 0 || location.x >= TILES_PER_MAP || location.y < 0 || location.y >= TILES_PER_MAP) {
+    return { ok: false, error: "Invalid tile coordinates" };
+  }
+
+  // Check occupancy via buildings
+  if (store.getBuildingAtTile(mapKey, location.x, location.y)) {
+    return { ok: false, error: "Tile already has a building" };
+  }
 
   // Admin outpost: max 1 per player per map
   if (buildingClass === "admin_outpost") {
@@ -190,11 +197,17 @@ export function placeBuilding(
     }
   }
 
-  // Mine: must be on matching resource tile
+  // Mine: must be on matching resource tile (check DB)
+  let resourceType: import("@mars-2035/shared").ResourceType | undefined;
+  let productionPerTick: number | undefined;
   if (buildingClass === "mine") {
-    if (!tile.resource) {
+    const resourceTile = await getResourceTile(mapKey, location.x, location.y);
+    if (!resourceTile) {
       return { ok: false, error: "Mine must be placed on a resource tile" };
     }
+    resourceType = resourceTile.resource_type as import("@mars-2035/shared").ResourceType;
+    const def = BUILDING_DEFS[buildingClass];
+    productionPerTick = (def.production_per_tick ?? 0) * resourceTile.richness;
   }
 
   const def = BUILDING_DEFS[buildingClass];
@@ -216,11 +229,8 @@ export function placeBuilding(
     status: initialStatus,
     inventory: {},
     capacity,
-    resource_type: buildingClass === "mine" ? tile.resource!.type : undefined,
-    production_per_tick:
-      buildingClass === "mine"
-        ? (def.production_per_tick ?? 0) * tile.resource!.richness
-        : undefined,
+    resource_type: resourceType,
+    production_per_tick: productionPerTick,
     output_buffer: def.recipe ? {} : undefined,
   };
 
@@ -231,7 +241,6 @@ export function placeBuilding(
 
   // Register building
   store.buildings.set(entityId, building);
-  tile.building_id = entityId;
 
   // Ensure player has a map account
   if (!player.map_accounts[mapKey]) {

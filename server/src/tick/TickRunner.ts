@@ -16,7 +16,8 @@ import { processBankruptcy } from "./phases/07-bankruptcy.js";
 import { saveSnapshot } from "../db.js";
 
 export class TickRunner {
-  private interval: ReturnType<typeof setInterval> | null = null;
+  private timeout: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
   private snapshotInterval: number;
 
   constructor(
@@ -28,24 +29,31 @@ export class TickRunner {
 
   start() {
     console.log(`Tick runner starting (interval: ${TICK_INTERVAL_MS}ms)`);
-    this.interval = setInterval(() => this.runTick(), TICK_INTERVAL_MS);
+    this.running = true;
+    this.scheduleTick();
   }
 
   stop() {
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
+    this.running = false;
+    if (this.timeout) {
+      clearTimeout(this.timeout);
+      this.timeout = null;
     }
   }
 
-  private runTick() {
+  private scheduleTick() {
+    if (!this.running) return;
+    this.timeout = setTimeout(() => this.runTick(), TICK_INTERVAL_MS);
+  }
+
+  private async runTick() {
     this.store.tick++;
     const t0 = performance.now();
 
     // 1. Update market prices (with supply pressure)
     updateMarketPrices(this.store);
-    // 2. Process player commands
-    processCommands(this.store);
+    // 2. Process player commands (async — mine placement queries DB)
+    await processCommands(this.store);
     // 3. Mines produce resources
     processProduction(this.store);
     // 4. Quantum relays instantly transfer resources between linked relays
@@ -78,5 +86,8 @@ export class TickRunner {
         console.error("Snapshot save failed:", err)
       );
     }
+
+    // Schedule next tick (prevents overlap since we await the tick)
+    this.scheduleTick();
   }
 }

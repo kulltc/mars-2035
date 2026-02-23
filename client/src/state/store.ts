@@ -166,6 +166,10 @@ export interface GameState {
   showConnectionLostModal: boolean;
   openConnectionLostModal: () => void;
   closeConnectionLostModal: () => void;
+
+  // ── Map expansion mode ──
+  expansionEmbassyId: string | null;
+  setExpansionMode: (embassyId: string | null) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -352,4 +356,8 @@ export const useGameStore = create<GameState>((set) => ({
   showConnectionLostModal: false,
   openConnectionLostModal: () => set({ showConnectionLostModal: true }),
   closeConnectionLostModal: () => set({ showConnectionLostModal: false }),
+
+  // ── Map expansion mode ──
+  expansionEmbassyId: null,
+  setExpansionMode: (expansionEmbassyId) => set({ expansionEmbassyId }),
 }));

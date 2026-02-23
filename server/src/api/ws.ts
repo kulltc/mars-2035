@@ -60,8 +60,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
 
       console.log(`WS client connected to map ${mapKey}`);
 
-      // Send initial snapshot (filtered per player)
-      const tiles = store.serializeTiles(mapKey);
+      // Send initial snapshot (filtered per player) — tiles served via REST
       const { buildings: filteredBuildings, workers: filteredWorkers, ambassadors: filteredAmbassadors } =
         filterStateForPlayer(playerId, store.getBuildingsByMap(mapKey), store.getWorkersByMap(mapKey), store.getAmbassadorsByMap(mapKey));
       socket.send(
@@ -69,7 +68,6 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
           type: "snapshot",
           map_key: mapKey,
           tick: store.tick,
-          tiles,
           buildings: filteredBuildings,
           workers: filteredWorkers,
           ambassadors: filteredAmbassadors,

@@ -15,7 +15,7 @@ import type {
   RouteResource,
   WorkerFilter,
 } from "@mars-2035/shared";
-import { remainingCapacity, WORKER_COST, BUILDING_DEFS, tileKey, RESEARCH_TREE, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER } from "@mars-2035/shared";
+import { remainingCapacity, WORKER_COST, BUILDING_DEFS, RESEARCH_TREE, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER, MAP_EXPANSION_COST, DISTRICTS_X, DISTRICTS_Y, MAPS_PER_DISTRICT_X, MAPS_PER_DISTRICT_Y } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
 import { placeBuilding, spawnWorker, applyResearchEffects } from "../../systems/building.js";
 
@@ -25,13 +25,13 @@ type HandlerResult =
   | { ok: true; events: Array<{ type: GameEvent["type"]; data: Record<string, unknown>; mapKey?: string }> }
   | { ok: false; error: string };
 
-type CommandHandler = (store: WorldStore, player: Player, data: Record<string, unknown>) => HandlerResult;
+type CommandHandler = (store: WorldStore, player: Player, data: Record<string, unknown>) => HandlerResult | Promise<HandlerResult>;
 
 const MAX_QUANTUM_RULES = 3;
 
 // ── Handlers ──
 
-function handlePlaceBuilding(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+async function handlePlaceBuilding(store: WorldStore, player: Player, data: Record<string, unknown>): Promise<HandlerResult> {
   const { building_class, location } = data as {
     building_class: BuildingClass;
     location: Location;
@@ -40,7 +40,7 @@ function handlePlaceBuilding(store: WorldStore, player: Player, data: Record<str
   const def = BUILDING_DEFS[building_class];
   const initialStatus = def.build_ticks > 0 ? "constructing" as const : "active" as const;
 
-  const result = placeBuilding(store, player, building_class, location, initialStatus);
+  const result = await placeBuilding(store, player, building_class, location, initialStatus);
   if (!result.ok) return result;
 
   // Create a construct task for buildings that need construction time
@@ -451,14 +451,6 @@ function handleSellBuilding(store: WorldStore, player: Player, data: Record<stri
     }
   }
 
-  // Clear tile
-  const mapTiles = store.tiles.get(building.map_key);
-  if (mapTiles) {
-    const tk = tileKey(building.location.x, building.location.y);
-    const tile = mapTiles.get(tk);
-    if (tile) delete tile.building_id;
-  }
-
   const mapKey = building.map_key;
   store.buildings.delete(building_id);
 
@@ -725,15 +717,6 @@ function handleForfeit(store: WorldStore, player: Player, _data: Record<string, 
   for (const [bid, building] of store.buildings) {
     if (building.owner_id !== playerId) continue;
     buildingIds.push(bid);
-
-    // Clear tile
-    const mapTiles = store.tiles.get(building.map_key);
-    if (mapTiles) {
-      const tk = tileKey(building.location.x, building.location.y);
-      const tile = mapTiles.get(tk);
-      if (tile) delete tile.building_id;
-    }
-
     store.buildings.delete(bid);
   }
 
@@ -828,6 +811,66 @@ function handleAcknowledgeBankrupt(_store: WorldStore, player: Player, _data: Re
   return { ok: true, events: [] };
 }
 
+function handleInitiateExpansion(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { embassy_building_id, target_map_key } = data as {
+    embassy_building_id: string;
+    target_map_key: MapKey;
+  };
+
+  // Validate research
+  if (!player.research.includes("unlock_new_map")) {
+    return { ok: false, error: "Planetary Expansion research required" };
+  }
+
+  // Validate embassy
+  const embassy = store.buildings.get(embassy_building_id);
+  if (!embassy) return { ok: false, error: "Embassy not found" };
+  if (embassy.class !== "embassy") return { ok: false, error: "Not an embassy" };
+  if (embassy.owner_id !== player.entity_id) return { ok: false, error: "Not your embassy" };
+  if (embassy.status !== "active") return { ok: false, error: "Embassy not active" };
+
+  // Validate target map coords
+  const parts = target_map_key.split(":").map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) return { ok: false, error: "Invalid map key" };
+  const [dx, dy, mx, my] = parts;
+  if (dx < 0 || dx >= DISTRICTS_X || dy < 0 || dy >= DISTRICTS_Y) return { ok: false, error: "Invalid district" };
+  if (mx < 0 || mx >= MAPS_PER_DISTRICT_X || my < 0 || my >= MAPS_PER_DISTRICT_Y) return { ok: false, error: "Invalid sector" };
+
+  // Check player doesn't already have outpost there
+  if (player.map_accounts[target_map_key]?.admin_outpost_building_id) {
+    return { ok: false, error: "You already have an outpost in this sector" };
+  }
+
+  // Check embassy inventory has all MAP_EXPANSION_COST materials
+  for (const [mat, cost] of Object.entries(MAP_EXPANSION_COST)) {
+    if (!cost) continue;
+    const available = embassy.inventory[mat as MaterialType] ?? 0;
+    if (available < cost) {
+      return { ok: false, error: `Insufficient ${mat.replace(/_/g, " ")} (need ${cost}, have ${available.toFixed(1)})` };
+    }
+  }
+
+  // Deduct materials from embassy inventory
+  for (const [mat, cost] of Object.entries(MAP_EXPANSION_COST)) {
+    if (!cost) continue;
+    embassy.inventory[mat as MaterialType] = (embassy.inventory[mat as MaterialType] ?? 0) - cost;
+  }
+
+  return {
+    ok: true,
+    events: [{
+      type: "building_placed",
+      data: {
+        expansion: true,
+        player_id: player.entity_id,
+        embassy_building_id,
+        target_map_key,
+      },
+      mapKey: embassy.map_key,
+    }],
+  };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -850,11 +893,12 @@ const handlers: Record<CommandType, CommandHandler> = {
   dismiss_tutorial: handleDismissTutorial,
   send_ambassador: handleSendAmbassador,
   acknowledge_bankrupt: handleAcknowledgeBankrupt,
+  initiate_expansion: handleInitiateExpansion,
 };
 
 // ── Main processor ──
 
-export function processCommands(store: WorldStore) {
+export async function processCommands(store: WorldStore) {
   const commands = store.commandQueue.splice(0);
 
   if (commands.length > 0) {
@@ -875,7 +919,7 @@ export function processCommands(store: WorldStore) {
       continue;
     }
 
-    const result = handler(store, player, cmd.data);
+    const result = await handler(store, player, cmd.data);
 
     if (result.ok) {
       console.log(`  ${cmd.type}: OK (${result.events.map(e => e.type).join(", ")})`);

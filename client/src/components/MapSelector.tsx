@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { RESOURCE_TYPES, type ResourceType, districtName, sectorName } from "@mars-2035/shared";
-import { fetchMap } from "../api/client.js";
+import { fetchMap, submitCommand } from "../api/client.js";
 import { useGameStore } from "../state/store.js";
 import { LockIcon } from "./LockIcon.js";
 import { useIsMobile } from "../hooks/useIsMobile.js";
@@ -102,6 +102,10 @@ export function MapSelector() {
   const currentMap = useGameStore((s) => s.currentMap);
   const setCurrentMap = useGameStore((s) => s.setCurrentMap);
   const toggleMapSelector = useGameStore((s) => s.toggleMapSelector);
+  const expansionEmbassyId = useGameStore((s) => s.expansionEmbassyId);
+  const setExpansionMode = useGameStore((s) => s.setExpansionMode);
+  const addNotification = useGameStore((s) => s.addNotification);
+  const isExpandMode = !!expansionEmbassyId;
 
   if (!player || !world || !currentMap) return null;
 
@@ -132,7 +136,7 @@ export function MapSelector() {
     world.maps_per_district_y,
   );
 
-  const hasUnlockNewMap = player.research?.includes("unlock_new_map");
+  const [expanding, setExpanding] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,11 +190,11 @@ export function MapSelector() {
   }, [browseDistrictDx, browseDistrictDy, cols, rows]);
 
   return (
-    <div className="modal-overlay" onClick={toggleMapSelector}>
+    <div className="modal-overlay" onClick={() => { setExpansionMode(null); toggleMapSelector(); }}>
       <div className="map-selector-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">SECTOR SELECTOR</span>
-          <button className="modal-close" onClick={toggleMapSelector}>&times;</button>
+          <span className="modal-title">{isExpandMode ? "EXPAND TO NEW SECTOR" : "SECTOR SELECTOR"}</span>
+          <button className="modal-close" onClick={() => { setExpansionMode(null); toggleMapSelector(); }}>&times;</button>
         </div>
         <div className="district-browser">
           <button
@@ -229,7 +233,9 @@ export function MapSelector() {
                 mx === currentMap.mx &&
                 my === currentMap.my;
               const isHome = browseDistrictDx === 0 && browseDistrictDy === 0 && mx === 0 && my === 0;
-              const canNavigate = hasOutpost || hasUnlockNewMap || isHome;
+              const canNavigate = isExpandMode
+                ? !hasOutpost  // expand mode: any sector without an existing outpost
+                : hasOutpost || isHome;   // navigate mode: only sectors WITH outpost or home
               const targetSectorLabel = sectorName(
                 browseDistrictDx,
                 browseDistrictDy,
@@ -251,13 +257,30 @@ export function MapSelector() {
                 <button
                   key={mapKey}
                   className={`map-cell ${isCurrent ? "current" : ""} ${hasOutpost ? "has-outpost" : ""} ${!canNavigate ? "locked" : ""}`}
-                  onClick={() => {
-                    if (!canNavigate) return;
-                    setCurrentMap({ dx: browseDistrictDx, dy: browseDistrictDy, mx, my });
-                    toggleMapSelector();
+                  onClick={async () => {
+                    if (!canNavigate || expanding) return;
+                    if (isExpandMode) {
+                      setExpanding(true);
+                      const res = await submitCommand("initiate_expansion", {
+                        embassy_building_id: expansionEmbassyId,
+                        target_map_key: mapKey,
+                      });
+                      setExpanding(false);
+                      if (res.error) {
+                        addNotification(`Expansion failed: ${res.error}`, "error");
+                        return;
+                      }
+                      addNotification("Expansion successful! Navigate to place your outpost.", "success");
+                      setExpansionMode(null);
+                      setCurrentMap({ dx: browseDistrictDx, dy: browseDistrictDy, mx, my });
+                      toggleMapSelector();
+                    } else {
+                      setCurrentMap({ dx: browseDistrictDx, dy: browseDistrictDy, mx, my });
+                      toggleMapSelector();
+                    }
                   }}
                   disabled={!canNavigate}
-                  title={`${targetSectorLabel} · ${densityTooltip}${hasOutpost ? " - Your outpost" : ""}${!canNavigate ? " - Locked" : ""}`}
+                  title={`${targetSectorLabel} · ${densityTooltip}${!canNavigate ? (isExpandMode ? " - You already have an outpost here" : " - No outpost") : ""}${isExpandMode && canNavigate ? " - Click to expand" : ""}`}
                 >
                   <span className="map-cell-name">{targetSectorLabel}</span>
                   <div className="map-cell-density-pills">

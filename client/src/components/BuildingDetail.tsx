@@ -5,7 +5,7 @@ import {
   MATERIAL_TYPES, TRADEABLE_TYPES, BUILDING_DEFS, SUSPENSION_DESTROY_TICKS,
   totalInventory, outputBufferTotal, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER,
   type MaterialType, type ResourceType, type AutoSellRule, type RouteResource, type Building, parseMapKey,
-  RESEARCH_TREE, sectorName, type ResearchDef,
+  RESEARCH_TREE, sectorName, type ResearchDef, MAP_EXPANSION_COST,
 } from "@mars-2035/shared";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
 import { LockIcon } from "./LockIcon.js";
@@ -765,6 +765,44 @@ export function BuildingDetail() {
                 )}
               </div>
             ))}
+            {/* Expand to New Sector */}
+            {player?.research?.includes("unlock_new_map") && (() => {
+              const toggleMapSelector = useGameStore.getState().toggleMapSelector;
+              const setExpansionMode = useGameStore.getState().setExpansionMode;
+              const costEntries = Object.entries(MAP_EXPANSION_COST).filter(([, v]) => v && v > 0);
+              const canAfford = costEntries.every(([mat, cost]) => {
+                const have = building.inventory[mat as MaterialType] ?? 0;
+                return have >= (cost ?? 0);
+              });
+              return (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Expansion Cost:</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                    {costEntries.map(([mat, cost]) => {
+                      const have = building.inventory[mat as MaterialType] ?? 0;
+                      const enough = have >= (cost ?? 0);
+                      return (
+                        <span key={mat} style={{ fontSize: 11, color: enough ? "var(--text-secondary)" : "var(--danger)" }}>
+                          {mat === "money" ? "$" : ""}{cost} {mat.replace(/_/g, " ")}
+                          {" "}({have.toFixed(0)})
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <button
+                    className="btn btn-accent btn-sm"
+                    disabled={!canAfford}
+                    title={canAfford ? "Open sector selector to expand" : "Insufficient materials in embassy"}
+                    onClick={() => {
+                      setExpansionMode(building.entity_id);
+                      toggleMapSelector();
+                    }}
+                  >
+                    Expand to New Sector
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}

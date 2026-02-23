@@ -67,7 +67,6 @@ export interface Tile {
   x: number;
   y: number;
   resource?: ResourceData;
-  building_id?: string;
 }
 
 // ── Building ──
@@ -313,7 +312,8 @@ export type CommandType =
   | "forfeit"
   | "dismiss_tutorial"
   | "send_ambassador"
-  | "acknowledge_bankrupt";
+  | "acknowledge_bankrupt"
+  | "initiate_expansion";
 
 export interface Command {
   id: string;

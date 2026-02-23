@@ -147,6 +147,10 @@ export const RESOURCE_TYPES: ResourceType[] = [
   "carbon",
 ];
 
+// ── Map expansion ──
+
+export const MAP_EXPANSION_COST: Assets = { money: 1500, toroidin_plate: 2, psychon_core: 2 };
+
 // ── Starting assets ──
 
 export const STARTING_MONEY = 500;

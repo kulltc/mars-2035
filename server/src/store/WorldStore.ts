@@ -1,7 +1,6 @@
 import {
   type Player,
   type Building,
-  type Tile,
   type GameEvent,
   type Command,
   type WorldMeta,
@@ -28,9 +27,7 @@ import {
   TERRITORY_BUILDINGS,
   TAX_PER_BUILDING,
   NEW_PLAYER_PROTECTION_TICKS,
-  tileKey,
 } from "@mars-2035/shared";
-import { generateWorld } from "../seed/worldGen.js";
 import { applyResearchEffects } from "../systems/building.js";
 import type { WorldSnapshotPayload } from "../db.js";
 
@@ -41,7 +38,6 @@ export class WorldStore {
   players = new Map<string, Player>();
   buildings = new Map<string, Building>();
   workers = new Map<string, Worker>();
-  tiles: Map<MapKey, Map<string, Tile>>; // mapKey → (tileKey → Tile)
   marketPrices: MarketPrices = { ...BASE_MARKET_PRICES };
   supplyPressure: Record<ResourceType, number> = Object.fromEntries(
     TRADEABLE_TYPES.map((r) => [r, 0])
@@ -76,10 +72,6 @@ export class WorldStore {
   // WebSocket subscribers: mapKey → Set<callback>
   subscribers = new Map<MapKey, Set<(events: GameEvent[], buildings: Building[], workers: Worker[], ambassadors: Ambassador[]) => void>>();
 
-  constructor(seed = 42) {
-    this.tiles = generateWorld(seed);
-  }
-
   // ── Helpers ──
 
   nextSeq(): number {
@@ -100,8 +92,11 @@ export class WorldStore {
     return event;
   }
 
-  getTile(mapKey: MapKey, x: number, y: number): Tile | undefined {
-    return this.tiles.get(mapKey)?.get(tileKey(x, y));
+  getBuildingAtTile(mapKey: MapKey, x: number, y: number): Building | undefined {
+    for (const b of this.buildings.values()) {
+      if (b.map_key === mapKey && b.location.x === x && b.location.y === y) return b;
+    }
+    return undefined;
   }
 
   getBuildingsByMap(mapKey: MapKey): Building[] {
@@ -220,8 +215,8 @@ export class WorldStore {
     };
   }
 
-  static fromSnapshot(payload: WorldSnapshotPayload, seed: number): WorldStore {
-    const store = new WorldStore(seed);
+  static fromSnapshot(payload: WorldSnapshotPayload): WorldStore {
+    const store = new WorldStore();
     store.tick = payload.tick;
     store.seq = payload.seq;
 
@@ -296,16 +291,6 @@ export class WorldStore {
     }
     if (payload.salesTaxHistory) {
       store.salesTaxHistory = new Map(Object.entries(payload.salesTaxHistory));
-    }
-
-    // Re-link buildings to tiles
-    for (const building of store.buildings.values()) {
-      const mapTiles = store.tiles.get(building.map_key as MapKey);
-      if (mapTiles) {
-        const tk = tileKey(building.location.x, building.location.y);
-        const tile = mapTiles.get(tk);
-        if (tile) tile.building_id = building.entity_id;
-      }
     }
 
     // One-time migration: move money from old map_accounts.assets to admin outpost inventory
@@ -405,13 +390,5 @@ export class WorldStore {
     }
 
     return store;
-  }
-
-  // ── Serialization helpers for API ──
-
-  serializeTiles(mapKey: MapKey): Tile[] {
-    const tileMap = this.tiles.get(mapKey);
-    if (!tileMap) return [];
-    return Array.from(tileMap.values());
   }
 }

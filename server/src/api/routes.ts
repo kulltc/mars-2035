@@ -8,7 +8,7 @@ import {
 } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 import { filterStateForPlayer } from "./filterState.js";
-import { pool } from "../db.js";
+import { pool, getResourceTilesForMap } from "../db.js";
 
 const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "place_building",
@@ -54,7 +54,12 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
       const { playerId } = req.user as { userId: string; playerId: string };
       const { dx, dy, mx, my } = req.params;
       const mapKey = toMapKey(Number(dx), Number(dy), Number(mx), Number(my));
-      const tiles = store.serializeTiles(mapKey);
+      const rows = await getResourceTilesForMap(mapKey);
+      const tiles = rows.map((r) => ({
+        x: r.x,
+        y: r.y,
+        resource: { type: r.resource_type, richness: r.richness },
+      }));
       const { buildings } = filterStateForPlayer(
         playerId, store.getBuildingsByMap(mapKey), []
       );

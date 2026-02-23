@@ -8,7 +8,8 @@ import { registerRoutes } from "./api/routes.js";
 import { registerWebSocket } from "./api/ws.js";
 import { registerAuthRoutes, setPlayerCounter } from "./api/auth.js";
 import { setBuildingCounter } from "./systems/building.js";
-import { initDb, loadLatestSnapshot } from "./db.js";
+import { initDb, loadLatestSnapshot, isResourceTilesSeeded, seedResourceTiles } from "./db.js";
+import { generateWorld } from "./seed/worldGen.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const JWT_SECRET = process.env.JWT_SECRET ?? "mars-2035-dev-secret";
@@ -24,12 +25,24 @@ async function main() {
   // Initialize database
   await initDb();
 
+  // Seed resource tiles into DB if not already present
+  const tilesSeeded = await isResourceTilesSeeded();
+  if (!tilesSeeded) {
+    console.log("Generating world resource tiles...");
+    const resourceTiles = generateWorld(42);
+    console.log(`Seeding ${resourceTiles.length} resource tiles into DB...`);
+    await seedResourceTiles(resourceTiles);
+    console.log("Resource tiles seeded");
+  } else {
+    console.log("Resource tiles already in DB, skipping generation");
+  }
+
   // Initialize world — restore from snapshot if available
   let store: WorldStore;
   const snapshot = await loadLatestSnapshot("mars-alpha");
 
   if (snapshot) {
-    store = WorldStore.fromSnapshot(snapshot, 42);
+    store = WorldStore.fromSnapshot(snapshot);
 
     // Restore building counter from max building ID (bld_N)
     let maxBld = 0;
@@ -50,8 +63,8 @@ async function main() {
 
     console.log(`Restored from tick ${snapshot.tick} (${store.players.size} players, ${store.buildings.size} buildings)`);
   } else {
-    store = new WorldStore(42);
-    console.log("World seeded with 1 district, 10 maps");
+    store = new WorldStore();
+    console.log("Fresh world initialized (tiles in DB)");
   }
 
   // Register routes

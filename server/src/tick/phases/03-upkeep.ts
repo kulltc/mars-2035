@@ -1,6 +1,5 @@
 import { type MapKey, WORKER_UPKEEP, SUSPENSION_DESTROY_TICKS, BUILDING_DEFS } from "@mars-2035/shared";
 import type { WorldStore } from "../../store/WorldStore.js";
-import { tileKey } from "@mars-2035/shared";
 
 export function processUpkeep(store: WorldStore) {
   // ── Destroy buildings suspended too long ──
@@ -18,14 +17,6 @@ export function processUpkeep(store: WorldStore) {
       owner_id: building.owner_id,
       reason: "suspended_too_long",
     }, building.map_key);
-
-    // Clear tile reference
-    const mapTiles = store.tiles.get(building.map_key);
-    if (mapTiles) {
-      const tk = tileKey(building.location.x, building.location.y);
-      const tile = mapTiles.get(tk);
-      if (tile) delete tile.building_id;
-    }
 
     // Remove any tasks referencing this building
     for (const [taskId, task] of store.taskQueue) {
