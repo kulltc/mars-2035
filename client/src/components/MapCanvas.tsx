@@ -20,6 +20,40 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * Math.min(1, Math.max(0, t));
 }
 
+// ── Worker sprite (loaded once, white background removed) ──
+
+let workerSpriteCanvas: HTMLCanvasElement | null = null;
+let workerCarryingCanvas: HTMLCanvasElement | null = null;
+// Per-worker displayed angle (radians), smoothly lerped toward movement direction
+const workerAngles = new Map<string, number>();
+
+function loadWorkerSprite(src: string, onDone: (canvas: HTMLCanvasElement) => void) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx2 = canvas.getContext("2d")!;
+    ctx2.drawImage(img, 0, 0);
+    const imgData = ctx2.getImageData(0, 0, canvas.width, canvas.height);
+    const px = imgData.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const r = px[i], g = px[i + 1], b = px[i + 2];
+      const brightness = (r + g + b) / 3;
+      if (brightness > 190) {
+        const fade = Math.min(1, (brightness - 190) / 65);
+        px[i + 3] = Math.round(px[i + 3] * (1 - fade));
+      }
+    }
+    ctx2.putImageData(imgData, 0, 0);
+    onDone(canvas);
+  };
+  img.src = src;
+}
+
+loadWorkerSprite("/worker-empty.png",  (c) => { workerSpriteCanvas   = c; });
+loadWorkerSprite("/worker-filled.png", (c) => { workerCarryingCanvas = c; });
+
 // ── Colors ──
 
 const RESOURCE_COLORS: Record<string, string> = {
@@ -530,11 +564,9 @@ export function MapCanvas() {
       // Compute positions with overlap spreading
       const workerPositions: Array<{ w: typeof state.workers[0]; wx: number; wy: number }> = [];
       for (const wk of state.workers) {
-        const isMoving = wk.state === "moving_to_pickup" || wk.state === "moving_to_dropoff" ||
-                         wk.state === "returning_to_base" || wk.state === "moving_to_construct";
         const prev = state.workerPrevPositions.get(wk.entity_id);
         let wx = wk.x, wy = wk.y;
-        if (isMoving && prev) {
+        if (prev && (prev.x !== wk.x || prev.y !== wk.y)) {
           wx = lerp(prev.x, wk.x, workerAlpha);
           wy = lerp(prev.y, wk.y, workerAlpha);
         }
@@ -569,23 +601,66 @@ export function MapCanvas() {
         const carrying = totalInventory(wk.inventory) > 0 || (wk.inventory.money ?? 0) > 0;
         const isInactive = wk.worker_status === "inactive";
         const isSelected = wk.entity_id === state.selectedWorkerId;
+        const isMovingWorker = wk.state === "moving_to_pickup" || wk.state === "moving_to_dropoff" ||
+                               wk.state === "returning_to_base" || wk.state === "moving_to_construct";
+        const spriteSize = Math.max(22, ts * 0.875);
         const radius = Math.max(3, ts * 0.12);
 
+        // ── Angle: smooth angular lerp toward movement direction ──
+        // Uses previous tick position to determine facing; lerps at ~0.1/frame so
+        // corner turns rotate smoothly over ~150 ms rather than snapping.
+        const prevPos = state.workerPrevPositions.get(wk.entity_id);
+        let displayAngle = workerAngles.get(wk.entity_id) ?? 0;
+        if (prevPos && (prevPos.x !== wk.x || prevPos.y !== wk.y)) {
+          const adx = wk.x - prevPos.x;
+          const ady = wk.y - prevPos.y;
+          const targetAngle = Math.atan2(ady, adx);
+          // Shortest-path angle delta (handles 0/2π wrap)
+          let diff = targetAngle - displayAngle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          displayAngle += diff * 0.1;
+          workerAngles.set(wk.entity_id, displayAngle);
+        }
+
+        // Selection ring
         if (isSelected) {
           ctx.beginPath();
-          ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+          ctx.arc(cx, cy, spriteSize / 2 + 4, 0, Math.PI * 2);
           ctx.strokeStyle = "#4fc3f7";
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
 
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fillStyle = isInactive ? "#555" : carrying ? "#ffd54f" : "#bbb";
-        ctx.fill();
-        ctx.strokeStyle = isSelected ? "#4fc3f7" : "rgba(0,0,0,0.6)";
-        ctx.lineWidth = isSelected ? 1.5 : 1;
-        ctx.stroke();
+        const activeSprite = carrying ? workerCarryingCanvas : workerSpriteCanvas;
+        if (activeSprite) {
+          // Bob along local forward axis (movement direction)
+          const bob = isMovingWorker
+            ? Math.sin(now / 250 + wx * 0.5 + wy * 0.5) * Math.min(3, ts * 0.06)
+            : 0;
+          ctx.save();
+          ctx.translate(cx, cy);
+          // Sprite faces south by default; subtract π/2 to align with atan2 east=0 convention
+          ctx.rotate(displayAngle + Math.PI / 2);
+          ctx.globalAlpha = isInactive ? 0.4 : 1.0;
+          ctx.drawImage(
+            activeSprite,
+            -spriteSize / 2,
+            -spriteSize / 2 + bob,
+            spriteSize,
+            spriteSize
+          );
+          ctx.restore();
+        } else {
+          // Fallback circle while sprite is loading
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fillStyle = isInactive ? "#555" : carrying ? "#ffd54f" : "#bbb";
+          ctx.fill();
+          ctx.strokeStyle = isSelected ? "#4fc3f7" : "rgba(0,0,0,0.6)";
+          ctx.lineWidth = isSelected ? 1.5 : 1;
+          ctx.stroke();
+        }
       }
 
       // ── Draw ambassadors ──
@@ -752,11 +827,9 @@ export function MapCanvas() {
     const hitR = Math.max(8, ts * 0.2);
 
     for (const wk of state.workers) {
-      const isMoving = wk.state === "moving_to_pickup" || wk.state === "moving_to_dropoff" ||
-                       wk.state === "returning_to_base" || wk.state === "moving_to_construct";
       const prev = state.workerPrevPositions.get(wk.entity_id);
       let wx = wk.x, wy = wk.y;
-      if (isMoving && prev) {
+      if (prev && (prev.x !== wk.x || prev.y !== wk.y)) {
         wx = lerp(prev.x, wk.x, workerAlpha);
         wy = lerp(prev.y, wk.y, workerAlpha);
       }
