@@ -575,28 +575,20 @@ export function MapCanvas() {
         workerPositions.push({ w: wk, wx, wy });
       }
 
-      // Group *stationary* workers by exact tile, sorted by entity_id for stable indices.
-      // Moving workers are excluded so their transit never reshuffles parked workers.
-      const tileStationary = new Map<string, string[]>();
-      for (const { w: wk } of workerPositions) {
-        const prev = state.workerPrevPositions.get(wk.entity_id);
-        if (prev && (prev.x !== wk.x || prev.y !== wk.y)) continue; // skip interpolating
-        const tk = `${wk.x}:${wk.y}`;
-        if (!tileStationary.has(tk)) tileStationary.set(tk, []);
-        tileStationary.get(tk)!.push(wk.entity_id);
-      }
-      for (const ids of tileStationary.values()) ids.sort();
-
-      // Compute target spread offsets for parked workers
+      // Hash-based fixed spread target per worker — independent of count/order.
+      // Workers alone on their destination tile target (0,0);
+      // workers sharing a tile (including ones still moving toward it) target
+      // their deterministic hash-angle position so they lerp into place on approach.
       const spreadTargets = new Map<string, { x: number; y: number }>();
-      for (const ids of tileStationary.values()) {
-        const count = ids.length;
-        if (count <= 1) continue;
-        for (let i = 0; i < count; i++) {
-          const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
-          const spread = Math.min(ts * 0.3, 3 + count * 2);
-          spreadTargets.set(ids[i], { x: Math.cos(angle) * spread, y: Math.sin(angle) * spread });
-        }
+      const spread = Math.min(ts * 0.45, 18);
+      for (const { w: wk } of workerPositions) {
+        // Deterministic angle from entity_id — use golden-ratio spacing on the
+        // numeric suffix so wrk_1, wrk_2, wrk_3 … fan out evenly.
+        // Every worker always targets its hash-angle position so it never snaps
+        // back to center when temporarily alone on a tile.
+        const numPart = parseInt(wk.entity_id.replace(/\D/g, ""), 10) || 0;
+        const angle = (numPart * 2.399963) % (Math.PI * 2); // 2.399963 ≈ golden angle
+        spreadTargets.set(wk.entity_id, { x: Math.cos(angle) * spread, y: Math.sin(angle) * spread });
       }
 
       for (const { w: wk, wx, wy } of workerPositions) {
