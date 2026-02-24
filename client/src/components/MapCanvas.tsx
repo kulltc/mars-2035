@@ -26,6 +26,8 @@ let workerSpriteCanvas: HTMLCanvasElement | null = null;
 let workerCarryingCanvas: HTMLCanvasElement | null = null;
 // Per-worker displayed angle (radians), smoothly lerped toward movement direction
 const workerAngles = new Map<string, number>();
+// Per-worker spread offset (pixels), smoothly lerped toward target spread position
+const workerSpreadOffsets = new Map<string, { x: number; y: number }>();
 
 function loadWorkerSprite(src: string, onDone: (canvas: HTMLCanvasElement) => void) {
   const img = new Image();
@@ -573,30 +575,43 @@ export function MapCanvas() {
         workerPositions.push({ w: wk, wx, wy });
       }
 
-      // Group by tile for spread
-      const tileGroups = new Map<string, number>();
-      for (const wp of workerPositions) {
-        const tk = `${Math.round(wp.wx)}:${Math.round(wp.wy)}`;
-        tileGroups.set(tk, (tileGroups.get(tk) ?? 0) + 1);
+      // Group *stationary* workers by exact tile, sorted by entity_id for stable indices.
+      // Moving workers are excluded so their transit never reshuffles parked workers.
+      const tileStationary = new Map<string, string[]>();
+      for (const { w: wk } of workerPositions) {
+        const prev = state.workerPrevPositions.get(wk.entity_id);
+        if (prev && (prev.x !== wk.x || prev.y !== wk.y)) continue; // skip interpolating
+        const tk = `${wk.x}:${wk.y}`;
+        if (!tileStationary.has(tk)) tileStationary.set(tk, []);
+        tileStationary.get(tk)!.push(wk.entity_id);
       }
-      const tileIndex = new Map<string, number>();
+      for (const ids of tileStationary.values()) ids.sort();
+
+      // Compute target spread offsets for parked workers
+      const spreadTargets = new Map<string, { x: number; y: number }>();
+      for (const ids of tileStationary.values()) {
+        const count = ids.length;
+        if (count <= 1) continue;
+        for (let i = 0; i < count; i++) {
+          const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
+          const spread = Math.min(ts * 0.3, 3 + count * 2);
+          spreadTargets.set(ids[i], { x: Math.cos(angle) * spread, y: Math.sin(angle) * spread });
+        }
+      }
 
       for (const { w: wk, wx, wy } of workerPositions) {
         const vsx = (wx - cam.x) * ts + ts / 2;
         const vsy = (wy - cam.y) * ts + ts / 2;
         if (vsx < -ts || vsx > w + ts || vsy < -ts || vsy > h + ts) continue;
 
-        let cx = vsx, cy = vsy;
-        const tk = `${Math.round(wx)}:${Math.round(wy)}`;
-        const count = tileGroups.get(tk) ?? 1;
-        if (count > 1) {
-          const idx = tileIndex.get(tk) ?? 0;
-          tileIndex.set(tk, idx + 1);
-          const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
-          const spread = Math.min(ts * 0.3, 3 + count * 2);
-          cx += Math.cos(angle) * spread;
-          cy += Math.sin(angle) * spread;
-        }
+        // Lerp spread offset toward target (0,0 for moving workers, spread pos for parked)
+        const spreadTarget = spreadTargets.get(wk.entity_id) ?? { x: 0, y: 0 };
+        const spreadCurrent = workerSpreadOffsets.get(wk.entity_id) ?? { x: 0, y: 0 };
+        const spreadX = lerp(spreadCurrent.x, spreadTarget.x, 0.08);
+        const spreadY = lerp(spreadCurrent.y, spreadTarget.y, 0.08);
+        workerSpreadOffsets.set(wk.entity_id, { x: spreadX, y: spreadY });
+
+        let cx = vsx + spreadX, cy = vsy + spreadY;
 
         const carrying = totalInventory(wk.inventory) > 0 || (wk.inventory.money ?? 0) > 0;
         const isInactive = wk.worker_status === "inactive";
