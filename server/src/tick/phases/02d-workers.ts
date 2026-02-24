@@ -93,6 +93,17 @@ export function processWorkers(store: WorldStore) {
         const shippable = Math.max(0, available - bufferReserve);
         const amount = Math.min(shippable, workerRemaining);
 
+        // Check destination max_stock
+        const destForMaxCheck = store.buildings.get(task.to_building_id);
+        if (destForMaxCheck) {
+          const maxStock = destForMaxCheck.max_stock?.[res];
+          if (maxStock !== undefined && (destForMaxCheck.inventory[res] ?? 0) >= maxStock) {
+            clearWorkerTask(store, worker);
+            worker.state = "idle";
+            break;
+          }
+        }
+
         if (amount <= 0) {
           // Source is empty or below buffer — skip this pickup entirely
           clearWorkerTask(store, worker);
@@ -159,7 +170,13 @@ export function processWorkers(store: WorldStore) {
         const res = task.resource;
         const carrying = worker.inventory[res] ?? 0;
         // Money doesn't count toward storage capacity, so always allow it
-        const destRemaining = res === "money" ? carrying : remainingCapacity(dest.inventory, dest.capacity);
+        let destRemaining = res === "money" ? carrying : remainingCapacity(dest.inventory, dest.capacity);
+        // Clamp by max_stock if set
+        const maxStock = dest.max_stock?.[res];
+        if (maxStock !== undefined) {
+          const currentAmount = dest.inventory[res] ?? 0;
+          destRemaining = Math.min(destRemaining, Math.max(0, maxStock - currentAmount));
+        }
         const amount = Math.min(carrying, destRemaining);
 
         if (amount > 0) {
@@ -321,6 +338,13 @@ function generatePickupTasks(store: WorldStore) {
         const available = (building.output_buffer?.[res] ?? 0) + (building.inventory[res] ?? 0);
         const buffer = building.buffer_stock?.[res] ?? 0;
         if (available - buffer <= 0) continue;
+
+        // Skip if destination is at or above max_stock for this resource
+        const dest = store.buildings.get(route.to_building_id);
+        if (dest) {
+          const maxStock = dest.max_stock?.[res];
+          if (maxStock !== undefined && (dest.inventory[res] ?? 0) >= maxStock) continue;
+        }
 
         // Only skip if an unclaimed pickup task is already pending in the queue
         const exists = taskExists(store, "pickup", (t: PickupTask) =>

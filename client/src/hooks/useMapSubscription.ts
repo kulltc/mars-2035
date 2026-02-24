@@ -35,7 +35,6 @@ const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 function notifyForEvents(events: GameEvent[]) {
   const state = useGameStore.getState();
   const addNotification = state.addNotification;
-  const openProtectionEndedModal = state.openProtectionEndedModal;
   const currentPlayerId = state.player?.entity_id;
 
   for (const evt of events) {
@@ -44,24 +43,21 @@ function notifyForEvents(events: GameEvent[]) {
         addNotification(`${evt.data.command_type}: ${evt.data.error}`, "error");
         break;
       case "building_suspended":
-        addNotification(
-          `Building suspended: ${evt.data.reason}`,
-          "warning"
-        );
+        if (evt.data.owner_id === currentPlayerId) {
+          addNotification(
+            `Building suspended: ${evt.data.reason}`,
+            "warning"
+          );
+        }
         break;
       case "building_destroyed":
-        addNotification("A building was destroyed!", "error");
+        if (evt.data.owner_id === currentPlayerId) {
+          addNotification("A building was destroyed!", "error");
+        }
         break;
       case "construction_complete":
         addNotification("Construction complete!", "success");
         break;
-      case "new_player_protection_ended": {
-        const playerId = evt.data.player_id as string | undefined;
-        if (playerId && currentPlayerId && playerId === currentPlayerId) {
-          openProtectionEndedModal();
-        }
-        break;
-      }
       case "ambassador_arrived": {
         const ownerId = evt.data.owner_id as string | undefined;
         const carried = evt.data.carried_money as number | undefined;
@@ -86,6 +82,10 @@ function notifyForEvents(events: GameEvent[]) {
           // Refresh player state — the tick already reset map_accounts/research
           const player = state.player;
           if (player) {
+            // Clear protection-ack keys so the modal shows again on restart
+            for (const key of Object.keys(player.map_accounts ?? {})) {
+              localStorage.removeItem(`protection-ack-${key}`);
+            }
             state.setPlayer({
               ...player,
               bankrupt: true,

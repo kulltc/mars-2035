@@ -149,6 +149,8 @@ export interface Building {
   quantum_rules?: QuantumRelayRule[];
   // Per-material minimum stock to keep (not shipped out by workers)
   buffer_stock?: Partial<Record<MaterialType, number>>;
+  // Per-material maximum stock ceiling (won't accept deliveries above this)
+  max_stock?: Partial<Record<MaterialType, number>>;
 }
 
 // ── Worker Task ──
@@ -246,6 +248,7 @@ export interface Ambassador {
   y: number;
   state: AmbassadorState;
   target_building_id?: string;
+  auto_target_building_id?: string;
   carried_money: number;
   cooldown_ticks: number;
 }
@@ -306,12 +309,14 @@ export type CommandType =
   | "configure_worker"
   | "do_research"
   | "set_buffer_stock"
+  | "set_max_stock"
   | "configure_quantum_rule"
   | "delete_quantum_rule"
   | "import"
   | "forfeit"
   | "dismiss_tutorial"
   | "send_ambassador"
+  | "set_auto_mission"
   | "acknowledge_bankrupt"
   | "initiate_expansion";
 

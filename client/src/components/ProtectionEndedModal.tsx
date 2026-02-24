@@ -1,4 +1,5 @@
 import React from "react";
+import { AmbassadorInfoContent } from "./AmbassadorInfo.js";
 
 interface ProtectionEndedModalProps {
   onClose: () => void;
@@ -13,6 +14,11 @@ export function ProtectionEndedModal({ onClose }: ProtectionEndedModalProps) {
           Mission control has lifted your tax shield. From this tick onward,
           your colonies are subject to standard sector taxes.
         </p>
+        <p className="tutorial-congrats-text">
+          Other players can now send <strong>ambassadors</strong> to your
+          buildings — and you can do the same to theirs.
+        </p>
+        <AmbassadorInfoContent />
         <button className="btn btn-accent" onClick={onClose}>
           Acknowledged
         </button>

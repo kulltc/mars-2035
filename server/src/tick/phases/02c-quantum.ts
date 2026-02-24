@@ -22,6 +22,9 @@ function transferOneUnit(source: Building, destination: Building, material: Mate
   const remaining = remainingCapacity(destination.inventory, destination.capacity);
   if (remaining < 1) return false;
 
+  const maxStock = destination.max_stock?.[material];
+  if (maxStock !== undefined && (destination.inventory[material] ?? 0) >= maxStock) return false;
+
   source.inventory[material] = available - 1;
   destination.inventory[material] = (destination.inventory[material] ?? 0) + 1;
   return true;

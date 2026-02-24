@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useGameStore } from "../state/store.js";
 import { submitCommand } from "../api/client.js";
 import { useIsMobile } from "../hooks/useIsMobile.js";
-import { districtName, sectorName, type MaterialType } from "@mars-2035/shared";
+import { districtName, sectorName, NEW_PLAYER_PROTECTION_TICKS, type MaterialType } from "@mars-2035/shared";
+import { ProtectionActiveModal } from "./AmbassadorInfo.js";
 
 const MATERIAL_GROUPS: { label: string; color: string; items: MaterialType[] }[] = [
   { label: "Raw", color: "var(--text-secondary)", items: ["steel", "silicon", "polymer", "rare_earth", "carbon"] },
@@ -46,6 +48,7 @@ export function TopBar() {
   const isMobile = useIsMobile();
 
   const [showForfeitConfirm, setShowForfeitConfirm] = useState(false);
+  const [showProtectionModal, setShowProtectionModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const inventoryRef = useRef<HTMLDivElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
@@ -85,6 +88,21 @@ export function TopBar() {
   const inv = adminBuilding?.inventory ?? {};
   const money = inv.money ?? 0;
   const lowCash = money <= 0 && !!adminBuilding;
+
+  // Protection countdown
+  const mapKey = currentMap ? `${currentMap.dx}:${currentMap.dy}:${currentMap.mx}:${currentMap.my}` : null;
+  const acct = mapKey ? player.map_accounts?.[mapKey] : null;
+  const protectionTicksLeft =
+    acct?.new_player_protection_active && acct.started_at_tick != null && world
+      ? Math.max(0, acct.started_at_tick + NEW_PLAYER_PROTECTION_TICKS - world.tick)
+      : 0;
+  const protectionCountdown = (() => {
+    if (protectionTicksLeft <= 0 || !world) return null;
+    const totalSeconds = Math.ceil((protectionTicksLeft * world.tick_interval_ms) / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  })();
 
   const resourcePills = (
     <>
@@ -128,6 +146,10 @@ export function TopBar() {
                 addNotification(`Forfeit failed: ${res.error}`, "error");
               } else {
                 if (player) {
+                  // Clear protection-ack keys so the modal shows again on restart
+                  for (const key of Object.keys(player.map_accounts ?? {})) {
+                    localStorage.removeItem(`protection-ack-${key}`);
+                  }
                   setPlayer({
                     ...player,
                     tutorial_step: 1,
@@ -240,6 +262,17 @@ export function TopBar() {
         >
           {resourcePills}
         </div>
+        {protectionCountdown && (
+          <div
+            className="resource-pill"
+            title="New player protection active"
+            style={{ cursor: "pointer" }}
+            onClick={(e) => { e.stopPropagation(); setShowProtectionModal(true); }}
+          >
+            <span className="label" style={{ color: "var(--success)" }}>🛡</span>
+            <span className="value">{protectionCountdown}</span>
+          </div>
+        )}
       </div>
 
       {/* Right section */}
@@ -282,6 +315,13 @@ export function TopBar() {
       {/* Popups */}
       {inventoryPopup}
       {forfeitConfirmModal}
+      {showProtectionModal && protectionCountdown && createPortal(
+        <ProtectionActiveModal
+          onClose={() => setShowProtectionModal(false)}
+          countdown={protectionCountdown}
+        />,
+        document.body,
+      )}
     </div>
   );
 }

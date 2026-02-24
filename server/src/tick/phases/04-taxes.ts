@@ -30,7 +30,7 @@ function expireNewPlayerProtection(store: WorldStore) {
 export function processTaxes(store: WorldStore) {
   expireNewPlayerProtection(store);
 
-  // Wealth tax: charge money stored in buildings at 1/10th the sales tax rate.
+  // Wealth tax: charge money stored in buildings at 1/100th the sales tax rate.
   for (const building of store.buildings.values()) {
     if (store.isNewPlayerProtectionActive(building.owner_id, building.map_key)) continue;
 
@@ -40,7 +40,8 @@ export function processTaxes(store: WorldStore) {
     const salesTaxRate = store.getTaxRate(building.map_key);
     if (salesTaxRate <= 0) continue;
 
-    const wealthTaxRate = salesTaxRate / 10;
+    // set wealth tax to zero for now.
+    const wealthTaxRate = 0 * salesTaxRate / 100;
     const computedTax = round2(money * wealthTaxRate);
     const taxAmount = Math.min(money, Math.max(1, computedTax));
     if (taxAmount <= 0) continue;

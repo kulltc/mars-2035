@@ -142,7 +142,7 @@ export function processUpkeep(store: WorldStore) {
           building.suspended_at_tick = store.tick;
           store.pushEvent(
             "building_suspended",
-            { building_id: building.entity_id, reason: "insufficient_funds" },
+            { building_id: building.entity_id, owner_id: building.owner_id, reason: "insufficient_funds" },
             mapKey
           );
         }

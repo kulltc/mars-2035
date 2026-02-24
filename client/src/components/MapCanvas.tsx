@@ -29,6 +29,10 @@ const workerAngles = new Map<string, number>();
 // Per-worker spread offset (pixels), smoothly lerped toward target spread position
 const workerSpreadOffsets = new Map<string, { x: number; y: number }>();
 
+// ── Ambassador sprite ──
+let ambassadorSpriteCanvas: HTMLCanvasElement | null = null;
+const ambassadorAngles = new Map<string, number>();
+
 function loadWorkerSprite(src: string, onDone: (canvas: HTMLCanvasElement) => void) {
   const img = new Image();
   img.onload = () => {
@@ -55,6 +59,7 @@ function loadWorkerSprite(src: string, onDone: (canvas: HTMLCanvasElement) => vo
 
 loadWorkerSprite("/worker-empty.png",  (c) => { workerSpriteCanvas   = c; });
 loadWorkerSprite("/worker-filled.png", (c) => { workerCarryingCanvas = c; });
+loadWorkerSprite("/ambassador.png",    (c) => { ambassadorSpriteCanvas = c; });
 
 // ── Colors ──
 
@@ -688,31 +693,49 @@ export function MapCanvas() {
         if (asx < -ts || asx > w + ts || asy < -ts || asy > h + ts) continue;
 
         const isOwn = amb.owner_id === playerId;
-        const radius = Math.max(4, ts * 0.14);
+        const spriteSize = Math.max(12, ts * 1.375);
 
-        // Draw diamond shape
-        ctx.beginPath();
-        ctx.moveTo(asx, asy - radius);
-        ctx.lineTo(asx + radius, asy);
-        ctx.lineTo(asx, asy + radius);
-        ctx.lineTo(asx - radius, asy);
-        ctx.closePath();
-        ctx.fillStyle = isOwn ? "#ff8a65" : "#ef5350";
-        ctx.fill();
-        ctx.strokeStyle = isOwn ? "#fff" : "rgba(255,255,255,0.4)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        // Smooth directional rotation (same approach as workers)
+        let displayAngle = ambassadorAngles.get(amb.entity_id) ?? 0;
+        if (prev && (prev.x !== ax || prev.y !== ay)) {
+          const adx = ax - prev.x;
+          const ady = ay - prev.y;
+          if (adx !== 0 || ady !== 0) {
+            const targetAngle = Math.atan2(ady, adx);
+            let diff = targetAngle - displayAngle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            displayAngle += diff * 0.1;
+          }
+        }
+        ambassadorAngles.set(amb.entity_id, displayAngle);
 
-        // Pulsing glow for moving ambassadors
-        if (isMoving) {
-          const pulse = 0.3 + 0.2 * Math.sin(now / 300);
-          ctx.globalAlpha = pulse;
+        if (ambassadorSpriteCanvas) {
+          const bob = isMoving
+            ? Math.sin(now / 250 + ax * 0.5 + ay * 0.5) * Math.min(3, ts * 0.06) : 0;
+          ctx.save();
+          ctx.translate(asx, asy);
+          ctx.rotate(displayAngle + Math.PI / 2);
+          ctx.globalAlpha = isOwn ? 1.0 : 0.7;
+          ctx.drawImage(
+            ambassadorSpriteCanvas,
+            -spriteSize / 2,
+            -spriteSize / 2 + bob,
+            spriteSize,
+            spriteSize,
+          );
+          ctx.restore();
+        } else {
+          // Fallback diamond while sprite loads
+          const radius = Math.max(4, ts * 0.14);
           ctx.beginPath();
-          ctx.arc(asx, asy, radius + 3, 0, Math.PI * 2);
-          ctx.strokeStyle = isOwn ? "#ff8a65" : "#ef5350";
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          ctx.globalAlpha = 1;
+          ctx.moveTo(asx, asy - radius);
+          ctx.lineTo(asx + radius, asy);
+          ctx.lineTo(asx, asy + radius);
+          ctx.lineTo(asx - radius, asy);
+          ctx.closePath();
+          ctx.fillStyle = isOwn ? "#ff8a65" : "#ef5350";
+          ctx.fill();
         }
       }
 
@@ -981,6 +1004,31 @@ export function MapCanvas() {
         return;
       }
 
+      // Auto-mission targeting mode
+      if (state.autoMissionTargetMode && state.player) {
+        const tile = screenToTile(sx, sy);
+        const targetBuilding = state.buildings.find(
+          (b) => b.location.x === tile.x && b.location.y === tile.y
+        );
+        if (targetBuilding && targetBuilding.owner_id !== state.player.entity_id) {
+          submitCommand("set_auto_mission", {
+            office_building_id: state.autoMissionTargetMode,
+            target_building_id: targetBuilding.entity_id,
+          }).then((res) => {
+            if (res.error) {
+              state.addNotification(`Auto-mission failed: ${res.error}`, "error");
+            } else {
+              state.addNotification("Auto-mission target set!", "success");
+            }
+          });
+          state.setAutoMissionTargetMode(null);
+        } else {
+          state.addNotification("Select a rival building", "warning");
+        }
+        mouseActionRef.current = { type: "idle" };
+        return;
+      }
+
       if (state.buildMode && state.player && state.currentMap) {
         // Place building
         const tile = screenToTile(sx, sy);
@@ -1131,6 +1179,7 @@ export function MapCanvas() {
         state.setAreaDrawMode(null);
         state.setRoutePickerTarget(null);
         state.setAmbassadorTargetMode(null);
+        state.setAutoMissionTargetMode(null);
         mouseActionRef.current = { type: "idle" };
         routeDragEndRef.current = null;
       }
@@ -1304,6 +1353,32 @@ export function MapCanvas() {
           return;
         }
 
+        // Auto-mission targeting mode (touch)
+        if (state.autoMissionTargetMode && state.player) {
+          const tile = screenToTile(pos.x, pos.y);
+          const targetBuilding = state.buildings.find(
+            (b) => b.location.x === tile.x && b.location.y === tile.y
+          );
+          if (targetBuilding && targetBuilding.owner_id !== state.player.entity_id) {
+            submitCommand("set_auto_mission", {
+              office_building_id: state.autoMissionTargetMode,
+              target_building_id: targetBuilding.entity_id,
+            }).then((res) => {
+              if (res.error) {
+                state.addNotification(`Auto-mission failed: ${res.error}`, "error");
+              } else {
+                state.addNotification("Auto-mission target set!", "success");
+              }
+            });
+            state.setAutoMissionTargetMode(null);
+          } else {
+            state.addNotification("Select a rival building", "warning");
+          }
+          touchModeRef.current = "idle";
+          mouseActionRef.current = { type: "idle" };
+          return;
+        }
+
         if (state.buildMode && state.player && state.currentMap) {
           const tile = screenToTile(pos.x, pos.y);
           if (tile.x >= 0 && tile.y >= 0 && tile.x < TILES_PER_MAP && tile.y < TILES_PER_MAP) {
@@ -1432,6 +1507,7 @@ export function MapCanvas() {
   if (state.buildMode) cursor = "crosshair";
   else if (state.areaDrawMode) cursor = "crosshair";
   else if (state.ambassadorTargetMode) cursor = "crosshair";
+  else if (state.autoMissionTargetMode) cursor = "crosshair";
   else if (mouseActionRef.current.type === "panning") cursor = "grabbing";
 
   return (
@@ -1494,6 +1570,25 @@ export function MapCanvas() {
             <button
               className="build-mode-cancel"
               onClick={() => state.setAmbassadorTargetMode(null)}
+            >
+              &#x2715;
+            </button>
+          ) : (
+            <span> — Click rival building, Esc to cancel</span>
+          )}
+        </div>
+      )}
+
+      {/* Auto-mission targeting banner */}
+      {state.autoMissionTargetMode && (
+        <div className="build-mode-indicator">
+          <span className="build-mode-label">
+            Select a rival building for auto-mission target
+          </span>
+          {isMobile ? (
+            <button
+              className="build-mode-cancel"
+              onClick={() => state.setAutoMissionTargetMode(null)}
             >
               &#x2715;
             </button>

@@ -26,7 +26,8 @@ export const TILES_PER_MAP = 300;
 // ── Tick ──
 
 export const TICK_INTERVAL_MS = 1000; // 5s for dev
-export const NEW_PLAYER_PROTECTION_TICKS = 3600 * 24;
+// export const NEW_PLAYER_PROTECTION_TICKS = 3600 * 24;
+export const NEW_PLAYER_PROTECTION_TICKS = 3600;
 
 // ── Building definitions ──
 

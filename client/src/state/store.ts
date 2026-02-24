@@ -82,6 +82,10 @@ export interface GameState {
   ambassadorTargetMode: string | null; // office_building_id when in targeting mode
   setAmbassadorTargetMode: (officeId: string | null) => void;
 
+  // Auto-mission targeting mode
+  autoMissionTargetMode: string | null; // office_building_id when in targeting mode
+  setAutoMissionTargetMode: (officeId: string | null) => void;
+
   // Selected worker
   selectedWorkerId: string | null;
   setSelectedWorkerId: (id: string | null) => void;
@@ -151,11 +155,6 @@ export interface GameState {
   setTaxInfo: (info: TaxInfo | null) => void;
   showTaxPanel: boolean;
   toggleTaxPanel: () => void;
-
-  // ── New player protection modal ──
-  showProtectionEndedModal: boolean;
-  openProtectionEndedModal: () => void;
-  closeProtectionEndedModal: () => void;
 
   // ── Bankruptcy modal ──
   showBankruptModal: boolean;
@@ -255,6 +254,10 @@ export const useGameStore = create<GameState>((set) => ({
   ambassadorTargetMode: null,
   setAmbassadorTargetMode: (ambassadorTargetMode) => set({ ambassadorTargetMode }),
 
+  // ── Auto-mission targeting ──
+  autoMissionTargetMode: null,
+  setAutoMissionTargetMode: (autoMissionTargetMode) => set({ autoMissionTargetMode }),
+
   // ── Selection ──
   selectedWorkerId: null,
   setSelectedWorkerId: (selectedWorkerId) => set({ selectedWorkerId }),
@@ -341,11 +344,6 @@ export const useGameStore = create<GameState>((set) => ({
   setTaxInfo: (taxInfo) => set({ taxInfo }),
   showTaxPanel: false,
   toggleTaxPanel: () => set((state) => ({ showTaxPanel: !state.showTaxPanel })),
-
-  // ── New player protection modal ──
-  showProtectionEndedModal: false,
-  openProtectionEndedModal: () => set({ showProtectionEndedModal: true }),
-  closeProtectionEndedModal: () => set({ showProtectionEndedModal: false }),
 
   // ── Bankruptcy modal ──
   showBankruptModal: false,

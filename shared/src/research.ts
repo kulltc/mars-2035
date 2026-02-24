@@ -93,6 +93,14 @@ export const RESEARCH_TREE: Record<string, ResearchDef> = {
     requires: ["foreign_affairs_2"],
     description: "Increase max embassy claim to \u00B150%.",
   },
+  foreign_affairs_4: {
+    id: "foreign_affairs_4",
+    name: "Diplomatic Automation",
+    track: "offensive_diplomacy",
+    cost: { autonomic_matrix: 2, zero_point_shard: 2 },
+    requires: ["foreign_affairs_3"],
+    description: "Unlock auto-mission: ambassador repeats missions automatically.",
+  },
 };
 
 /** Get the research ID that unlocks a building class, if any */

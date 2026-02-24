@@ -23,13 +23,16 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "configure_worker",
   "do_research",
   "set_buffer_stock",
+  "set_max_stock",
   "configure_quantum_rule",
   "delete_quantum_rule",
   "import",
   "forfeit",
   "dismiss_tutorial",
   "send_ambassador",
-  "acknowledge_bankrupt"
+  "set_auto_mission",
+  "acknowledge_bankrupt",
+  "initiate_expansion"
 ]);
 
 let commandCounter = 0;

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGameStore } from "./state/store.js";
 import { useMapSubscription } from "./hooks/useMapSubscription.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
@@ -39,8 +39,6 @@ export function App() {
   const showWorkers = useGameStore((s) => s.showWorkers);
   const showMapSelector = useGameStore((s) => s.showMapSelector);
   const showTaxPanel = useGameStore((s) => s.showTaxPanel);
-  const showProtectionEndedModal = useGameStore((s) => s.showProtectionEndedModal);
-  const closeProtectionEndedModal = useGameStore((s) => s.closeProtectionEndedModal);
   const showBankruptModal = useGameStore((s) => s.showBankruptModal);
   const openBankruptModal = useGameStore((s) => s.openBankruptModal);
   const closeBankruptModal = useGameStore((s) => s.closeBankruptModal);
@@ -49,6 +47,28 @@ export function App() {
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
   const isMobile = useIsMobile();
   const [showSectorWelcome, setShowSectorWelcome] = useState(false);
+  const [protectionAckKey, setProtectionAckKey] = useState(0);
+
+  // Derive protection-ended modal from game state + localStorage ack
+  const mapKey = useMemo(
+    () => currentMap ? `${currentMap.dx}:${currentMap.dy}:${currentMap.mx}:${currentMap.my}` : null,
+    [currentMap]
+  );
+  const showProtectionEndedModal = useMemo(() => {
+    if (!mapKey || !player) return false;
+    const acct = player.map_accounts?.[mapKey];
+    if (!acct) return false;
+    return acct.started_at_tick != null
+      && acct.new_player_protection_active === false
+      && !localStorage.getItem(`protection-ack-${mapKey}`);
+  }, [mapKey, player, protectionAckKey]);
+
+  const closeProtectionEndedModal = useCallback(() => {
+    if (mapKey) {
+      localStorage.setItem(`protection-ack-${mapKey}`, "1");
+      setProtectionAckKey((k) => k + 1);
+    }
+  }, [mapKey]);
 
   const prevPlayerIdRef = useRef<string | null>(null);
   const prevMapAccountCountRef = useRef<number>(0);

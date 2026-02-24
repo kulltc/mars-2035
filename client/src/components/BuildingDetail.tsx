@@ -11,6 +11,7 @@ import { DISPLAY_NAMES } from "./MapCanvas.js";
 import { LockIcon } from "./LockIcon.js";
 import { useIsMobile } from "../hooks/useIsMobile.js";
 import { BottomSheet } from "./BottomSheet.js";
+import { AmbassadorInfoModal } from "./AmbassadorInfo.js";
 
 const BUILDING_COLORS: Record<string, string> = {
   admin_outpost: "#4fc3f7", research_lab: "#7e57c2", mine: "#ffb74d", port: "#81c784",
@@ -71,6 +72,7 @@ export function BuildingDetail() {
 
   // Local buffer stock state
   const [localBufferStock, setLocalBufferStock] = useState<Partial<Record<MaterialType, number>>>({});
+  const [localMaxStock, setLocalMaxStock] = useState<Partial<Record<MaterialType, number>>>({});
 
   // Port mode (buy/sell toggle)
   const [portMode, setPortMode] = useState<"sell" | "buy">("sell");
@@ -81,6 +83,7 @@ export function BuildingDetail() {
   const [moneyTransferTargetMapKey, setMoneyTransferTargetMapKey] = useState("");
   const [moneyTransferAmount, setMoneyTransferAmount] = useState(100);
   const [bufferStockExpanded, setBufferStockExpanded] = useState(false);
+  const [showAmbassadorInfo, setShowAmbassadorInfo] = useState(false);
 
   // Local auto-sell state
   const [localAutoSell, setLocalAutoSell] = useState<Partial<Record<ResourceType, AutoSellRule | null>>>({});
@@ -99,6 +102,7 @@ export function BuildingDetail() {
       trackedId.current = building?.entity_id ?? null;
       setLocalAutoSell({});
       setLocalBufferStock({});
+      setLocalMaxStock({});
       setMoneyTransferTargetMapKey("");
       setMoneyTransferAmount(100);
     }
@@ -431,6 +435,11 @@ export function BuildingDetail() {
             if ((building.buffer_stock[key] ?? 0) > 0) materials.add(key);
           }
         }
+        if (building.max_stock) {
+          for (const key of Object.keys(building.max_stock) as MaterialType[]) {
+            if ((building.max_stock[key] ?? 0) > 0) materials.add(key);
+          }
+        }
         // Also include routed resources — "all" adds all non-money materials
         for (const route of effectiveRoutes) {
           if (route.resource === "all") {
@@ -459,8 +468,10 @@ export function BuildingDetail() {
         const visibleMaterials = showExpand && !bufferStockExpanded ? priority : allSorted;
 
         const renderRow = (mat: MaterialType) => {
-          const serverVal = building.buffer_stock?.[mat] ?? 0;
-          const val = mat in localBufferStock ? (localBufferStock[mat] ?? 0) : serverVal;
+          const serverMin = building.buffer_stock?.[mat] ?? 0;
+          const minVal = mat in localBufferStock ? (localBufferStock[mat] ?? 0) : serverMin;
+          const serverMax = building.max_stock?.[mat];
+          const maxVal = mat in localMaxStock ? (localMaxStock[mat] ?? "") : (serverMax ?? "");
           return (
             <div key={mat} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
               <span style={{ flex: 1, color: "var(--text-secondary)" }}>{mat.replace(/_/g, " ")}</span>
@@ -469,7 +480,7 @@ export function BuildingDetail() {
                 className="input"
                 min="0"
                 step="1"
-                value={val}
+                value={minVal}
                 onChange={(e) => {
                   const amount = Math.max(0, Math.round(Number(e.target.value)));
                   setLocalBufferStock((prev) => ({ ...prev, [mat]: amount }));
@@ -479,7 +490,35 @@ export function BuildingDetail() {
                     amount,
                   });
                 }}
-                style={{ width: 60, padding: "1px 4px", fontSize: 11 }}
+                style={{ width: 50, padding: "1px 4px", fontSize: 11 }}
+              />
+              <input
+                type="number"
+                className="input"
+                min="0"
+                step="1"
+                placeholder={String(building.capacity)}
+                value={maxVal}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    setLocalMaxStock((prev) => ({ ...prev, [mat]: undefined as any }));
+                    submitCommand("set_max_stock", {
+                      building_id: building.entity_id,
+                      resource: mat,
+                      amount: building.capacity,
+                    });
+                  } else {
+                    const amount = Math.max(0, Math.round(Number(raw)));
+                    setLocalMaxStock((prev) => ({ ...prev, [mat]: amount }));
+                    submitCommand("set_max_stock", {
+                      building_id: building.entity_id,
+                      resource: mat,
+                      amount,
+                    });
+                  }
+                }}
+                style={{ width: 50, padding: "1px 4px", fontSize: 11 }}
               />
             </div>
           );
@@ -487,7 +526,12 @@ export function BuildingDetail() {
 
         return (
           <div className="bd-section">
-            <div className="bd-section-title">Buffer Stock</div>
+            <div className="bd-section-title">Stock Management</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>
+              <span style={{ flex: 1 }}>Resource</span>
+              <span style={{ width: 50, textAlign: "center" }}>Min</span>
+              <span style={{ width: 50, textAlign: "center" }}>Max</span>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {visibleMaterials.map(renderRow)}
               {showExpand && (
@@ -729,42 +773,104 @@ export function BuildingDetail() {
           (a) => a.office_building_id === building.entity_id
         );
         const setAmbassadorTargetMode = useGameStore.getState().setAmbassadorTargetMode;
+        const setAutoMissionTargetMode = useGameStore.getState().setAutoMissionTargetMode;
+        const hasAutoMission = player?.research?.includes("foreign_affairs_4");
         return (
           <div className="bd-section">
-            <div className="bd-section-title">Ambassador</div>
+            <div className="bd-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              Ambassador
+              <button
+                className="btn btn-sm"
+                style={{ fontSize: 10, padding: "2px 6px" }}
+                onClick={() => setShowAmbassadorInfo(true)}
+              >
+                How it works
+              </button>
+            </div>
+            {showAmbassadorInfo && (
+              <AmbassadorInfoModal onClose={() => setShowAmbassadorInfo(false)} />
+            )}
             {ambassadors.length === 0 ? (
               <div className="route-hint">No ambassador stationed yet</div>
-            ) : ambassadors.map((amb) => (
-              <div key={amb.entity_id} style={{ fontSize: 12, marginBottom: 8 }}>
-                <div>
-                  Status: <strong style={{ color: amb.state === "idle" ? "var(--success)" : "var(--warning)" }}>
-                    {amb.state.replace(/_/g, " ")}
-                  </strong>
+            ) : ambassadors.map((amb) => {
+              const autoTarget = amb.auto_target_building_id
+                ? buildings.find((b) => b.entity_id === amb.auto_target_building_id)
+                : null;
+              return (
+                <div key={amb.entity_id} style={{ fontSize: 12, marginBottom: 8 }}>
+                  <div>
+                    Status: <strong style={{ color: amb.state === "idle" ? "var(--success)" : "var(--warning)" }}>
+                      {amb.state.replace(/_/g, " ")}
+                    </strong>
+                  </div>
+                  {amb.state === "returning" && amb.carried_money > 0 && (
+                    <div style={{ color: "var(--money)" }}>
+                      Carrying: ${amb.carried_money.toFixed(1)}
+                    </div>
+                  )}
+                  {amb.state === "idle" && amb.cooldown_ticks > 0 && (
+                    <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
+                      Cooldown: {amb.cooldown_ticks} ticks
+                      {autoTarget && (
+                        <span style={{ color: "var(--accent)" }}>
+                          {" "}· Auto: {DISPLAY_NAMES[autoTarget.class] ?? autoTarget.class} ({autoTarget.location.x},{autoTarget.location.y})
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {amb.state === "idle" && amb.cooldown_ticks <= 0 && (
+                    <button
+                      className="btn btn-accent btn-sm"
+                      style={{ marginTop: 4 }}
+                      onClick={() => {
+                        setAmbassadorTargetMode(building.entity_id);
+                        addNotification("Click a rival building to send ambassador", "info");
+                      }}
+                    >
+                      Send Ambassador
+                    </button>
+                  )}
+                  {hasAutoMission && (
+                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
+                      {autoTarget ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>
+                            Auto: <strong style={{ color: "var(--accent)" }}>
+                              {DISPLAY_NAMES[autoTarget.class] ?? autoTarget.class} ({autoTarget.location.x},{autoTarget.location.y})
+                            </strong>
+                          </span>
+                          <button
+                            className="btn btn-sm"
+                            style={{ fontSize: 10, padding: "1px 6px" }}
+                            onClick={async () => {
+                              const res = await submitCommand("set_auto_mission", {
+                                office_building_id: building.entity_id,
+                                target_building_id: null,
+                              });
+                              if (res.error) addNotification(`Clear failed: ${res.error}`, "error");
+                              else addNotification("Auto-mission cleared", "info");
+                            }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn btn-sm"
+                          style={{ fontSize: 11 }}
+                          onClick={() => {
+                            setAutoMissionTargetMode(building.entity_id);
+                            addNotification("Click a rival building to set auto-mission target", "info");
+                          }}
+                        >
+                          Set Auto Target
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {amb.state === "returning" && amb.carried_money > 0 && (
-                  <div style={{ color: "var(--money)" }}>
-                    Carrying: ${amb.carried_money.toFixed(1)}
-                  </div>
-                )}
-                {amb.state === "idle" && amb.cooldown_ticks > 0 && (
-                  <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
-                    Cooldown: {amb.cooldown_ticks} ticks
-                  </div>
-                )}
-                {amb.state === "idle" && amb.cooldown_ticks <= 0 && (
-                  <button
-                    className="btn btn-accent btn-sm"
-                    style={{ marginTop: 4 }}
-                    onClick={() => {
-                      setAmbassadorTargetMode(building.entity_id);
-                      addNotification("Click a rival building to send ambassador", "info");
-                    }}
-                  >
-                    Send Ambassador
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
             {/* Expand to New Sector */}
             {player?.research?.includes("unlock_new_map") && (() => {
               const toggleMapSelector = useGameStore.getState().toggleMapSelector;

@@ -624,6 +624,39 @@ function handleSetBufferStock(store: WorldStore, player: Player, data: Record<st
   };
 }
 
+function handleSetMaxStock(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { building_id, resource, amount } = data as {
+    building_id: string;
+    resource: MaterialType;
+    amount: number;
+  };
+
+  const building = store.buildings.get(building_id);
+  if (!building) return { ok: false, error: "Building not found" };
+  if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+
+  if (amount >= 0 && amount < building.capacity) {
+    if (!building.max_stock) building.max_stock = {};
+    building.max_stock[resource] = amount;
+  } else {
+    if (building.max_stock) {
+      delete building.max_stock[resource];
+      if (Object.keys(building.max_stock).length === 0) {
+        delete building.max_stock;
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    events: [{
+      type: "route_executed",
+      data: { building_id, resource, max_stock: amount, configured: true },
+      mapKey: building.map_key,
+    }],
+  };
+}
+
 function handleConfigureQuantumRule(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
   const { building_id, to_building_id, materials } = data as {
     building_id: string;
@@ -801,6 +834,47 @@ function handleSendAmbassador(store: WorldStore, player: Player, data: Record<st
   };
 }
 
+function handleSetAutoMission(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { office_building_id, target_building_id } = data as {
+    office_building_id: string;
+    target_building_id: string | null;
+  };
+
+  const office = store.buildings.get(office_building_id);
+  if (!office) return { ok: false, error: "Office not found" };
+  if (office.class !== "embassy") return { ok: false, error: "Not an Embassy" };
+  if (office.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+
+  if (!player.research.includes("foreign_affairs_4")) {
+    return { ok: false, error: "Diplomatic Automation research required" };
+  }
+
+  // Find the ambassador at this office
+  let ambassador: import("@mars-2035/shared").Ambassador | undefined;
+  for (const a of store.ambassadors.values()) {
+    if (a.office_building_id === office_building_id) {
+      ambassador = a;
+      break;
+    }
+  }
+  if (!ambassador) return { ok: false, error: "No ambassador at this embassy" };
+
+  if (target_building_id === null) {
+    // Clear auto-target
+    ambassador.auto_target_building_id = undefined;
+    return { ok: true, events: [] };
+  }
+
+  const target = store.buildings.get(target_building_id);
+  if (!target) return { ok: false, error: "Target building not found" };
+  if (target.map_key !== office.map_key) return { ok: false, error: "Target must be on same map" };
+  if (target.owner_id === player.entity_id) return { ok: false, error: "Cannot target your own building" };
+
+  ambassador.auto_target_building_id = target_building_id;
+
+  return { ok: true, events: [] };
+}
+
 function handleDismissTutorial(_store: WorldStore, player: Player, _data: Record<string, unknown>): HandlerResult {
   player.tutorial_step = undefined;
   return { ok: true, events: [] };
@@ -887,11 +961,13 @@ const handlers: Record<CommandType, CommandHandler> = {
   configure_worker: handleConfigureWorker,
   do_research: handleDoResearch,
   set_buffer_stock: handleSetBufferStock,
+  set_max_stock: handleSetMaxStock,
   configure_quantum_rule: handleConfigureQuantumRule,
   delete_quantum_rule: handleDeleteQuantumRule,
   forfeit: handleForfeit,
   dismiss_tutorial: handleDismissTutorial,
   send_ambassador: handleSendAmbassador,
+  set_auto_mission: handleSetAutoMission,
   acknowledge_bankrupt: handleAcknowledgeBankrupt,
   initiate_expansion: handleInitiateExpansion,
 };

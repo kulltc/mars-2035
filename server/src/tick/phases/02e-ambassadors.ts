@@ -36,6 +36,35 @@ export function processAmbassadors(store: WorldStore) {
     // Tick down cooldown
     if (ambassador.cooldown_ticks > 0) {
       ambassador.cooldown_ticks--;
+      // Auto-dispatch when cooldown just hit 0
+      if (ambassador.cooldown_ticks === 0 && ambassador.state === "idle" && ambassador.auto_target_building_id) {
+        const player = store.players.get(ambassador.owner_id);
+        if (player && player.research.includes("foreign_affairs_4")) {
+          const target = store.buildings.get(ambassador.auto_target_building_id);
+          const office = store.buildings.get(ambassador.office_building_id);
+          if (
+            target && office &&
+            target.map_key === office.map_key &&
+            target.owner_id !== ambassador.owner_id &&
+            !store.isNewPlayerProtectionActive(target.owner_id, target.map_key) &&
+            !store.isNewPlayerProtectionActive(ambassador.owner_id, office.map_key)
+          ) {
+            ambassador.state = "moving_to_target";
+            ambassador.target_building_id = ambassador.auto_target_building_id;
+            store.pushEvent("ambassador_dispatched", {
+              ambassador_id: ambassador.entity_id,
+              owner_id: ambassador.owner_id,
+              office_building_id: ambassador.office_building_id,
+              target_building_id: ambassador.auto_target_building_id,
+              target_owner_id: target.owner_id,
+              auto: true,
+            }, ambassador.map_key);
+          } else {
+            // Target invalid, clear auto-target
+            ambassador.auto_target_building_id = undefined;
+          }
+        }
+      }
       continue; // skip all other processing while on cooldown
     }
 
