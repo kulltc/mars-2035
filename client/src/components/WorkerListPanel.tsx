@@ -52,8 +52,8 @@ export function WorkerListPanel() {
               const invEntries = Object.entries(w.inventory).filter(([, v]) => v && v > 0);
 
               const area = w.task_filter?.area;
-              const areaLabel = area
-                ? `(${area.x1},${area.y1})-(${area.x2},${area.y2})`
+              const areaLabel = area && area.length > 0
+                ? `${area.length} rect${area.length !== 1 ? "s" : ""}`
                 : "All";
 
               return (

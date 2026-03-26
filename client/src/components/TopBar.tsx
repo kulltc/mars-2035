@@ -38,6 +38,8 @@ export function TopBar() {
   const toggleWorkers = useGameStore((s) => s.toggleWorkers);
   const toggleMapSelector = useGameStore((s) => s.toggleMapSelector);
   const showMarket = useGameStore((s) => s.showMarket);
+  const toggleWorkAreas = useGameStore((s) => s.toggleWorkAreas);
+  const showWorkAreas = useGameStore((s) => s.showWorkAreas);
   const logout = useGameStore((s) => s.logout);
   const addNotification = useGameStore((s) => s.addNotification);
   const showMainMenu = useGameStore((s) => s.showMainMenu);
@@ -212,6 +214,9 @@ export function TopBar() {
           <button className="main-menu-item" onClick={() => { toggleMainMenu(); toggleWorkers(); }}>
             Worker List
           </button>
+          <button className="main-menu-item" onClick={() => { toggleMainMenu(); toggleWorkAreas(); }}>
+            Work Areas
+          </button>
           <div className="main-menu-divider" />
         </>
       )}
@@ -295,6 +300,13 @@ export function TopBar() {
             </button>
             <button className="icon-btn" onClick={toggleTechTree} title="Tech Tree">
               ?
+            </button>
+            <button
+              className={`icon-btn ${showWorkAreas ? "active" : ""}`}
+              onClick={toggleWorkAreas}
+              title="Work Areas"
+            >
+              &#x25A3;
             </button>
           </>
         )}

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type {
   Player, Building, Tile, GameEvent, WorldMeta, MarketPrices, Worker, WorkerFilter,
-  BuildingClass, TaxInfo, Ambassador,
+  BuildingClass, TaxInfo, Ambassador, WorkArea, AreaRect,
 } from "@mars-2035/shared";
 
 // ── Notification types ──
@@ -169,6 +169,22 @@ export interface GameState {
   // ── Map expansion mode ──
   expansionEmbassyId: string | null;
   setExpansionMode: (embassyId: string | null) => void;
+
+  // ── Work Areas ──
+  workAreas: WorkArea[];
+  setWorkAreas: (areas: WorkArea[]) => void;
+  selectedAreaId: string | null;
+  setSelectedAreaId: (id: string | null) => void;
+  workAreaDrawMode: boolean;
+  setWorkAreaDrawMode: (v: boolean) => void;
+  showWorkAreas: boolean;
+  toggleWorkAreas: () => void;
+  workAreaEditMode: "add" | "sub";
+  setWorkAreaEditMode: (m: "add" | "sub") => void;
+  editingAreaId: string | null;
+  setEditingAreaId: (id: string | null) => void;
+  pendingAreaRects: AreaRect[];
+  setPendingAreaRects: (rects: AreaRect[]) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -358,4 +374,20 @@ export const useGameStore = create<GameState>((set) => ({
   // ── Map expansion mode ──
   expansionEmbassyId: null,
   setExpansionMode: (expansionEmbassyId) => set({ expansionEmbassyId }),
+
+  // ── Work Areas ──
+  workAreas: [],
+  setWorkAreas: (workAreas) => set({ workAreas }),
+  selectedAreaId: null,
+  setSelectedAreaId: (selectedAreaId) => set({ selectedAreaId }),
+  workAreaDrawMode: false,
+  setWorkAreaDrawMode: (workAreaDrawMode) => set({ workAreaDrawMode }),
+  showWorkAreas: false,
+  toggleWorkAreas: () => set((state) => ({ showWorkAreas: !state.showWorkAreas })),
+  workAreaEditMode: "add",
+  setWorkAreaEditMode: (workAreaEditMode) => set({ workAreaEditMode }),
+  editingAreaId: null,
+  setEditingAreaId: (editingAreaId) => set({ editingAreaId }),
+  pendingAreaRects: [],
+  setPendingAreaRects: (pendingAreaRects) => set({ pendingAreaRects }),
 }));

@@ -22,6 +22,7 @@ import { TaxPanel } from "./components/TaxPanel.js";
 import { ProtectionEndedModal } from "./components/ProtectionEndedModal.js";
 import { BankruptModal } from "./components/BankruptModal.js";
 import { ConnectionLostModal } from "./components/ConnectionLostModal.js";
+import { WorkAreasPanel } from "./components/WorkAreasPanel.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -45,6 +46,7 @@ export function App() {
   const showConnectionLostModal = useGameStore((s) => s.showConnectionLostModal);
   const showBuildSheet = useGameStore((s) => s.showBuildSheet);
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
+  const showWorkAreas = useGameStore((s) => s.showWorkAreas);
   const isMobile = useIsMobile();
   const [showSectorWelcome, setShowSectorWelcome] = useState(false);
   const [protectionAckKey, setProtectionAckKey] = useState(0);
@@ -157,6 +159,7 @@ export function App() {
         {showTechTree && <TechTree />}
         {showWorkers && <WorkerListPanel />}
         {showTaxPanel && <TaxPanel />}
+        {showWorkAreas && <WorkAreasPanel />}
         {!player.bankrupt && <TutorialChecklist />}
       </div>
       {isMobile ? (
@@ -194,6 +197,7 @@ export function App() {
           }
         }} />
       )}
+
     </div>
   );
 }

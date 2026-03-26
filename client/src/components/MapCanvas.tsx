@@ -4,7 +4,7 @@ import { useIsMobile } from "../hooks/useIsMobile.js";
 import {
   TICK_INTERVAL_MS, TILES_PER_MAP,
   totalInventory, BUILDING_DEFS, TERRITORY_RADIUS,
-  type Building, type BuildingClass, type MaterialType,
+  type AreaRect, type Building, type BuildingClass, type MaterialType,
   getTerritoryInfo, type TerritoryBuilding, toMapKey,
 } from "@mars-2035/shared";
 import { submitCommand } from "../api/client.js";
@@ -147,6 +147,93 @@ function getRouteColor(resource: string): string {
   if (cryo.includes(resource)) return "#4dd0e1";
   if (psycho.includes(resource)) return "#f48fb1";
   return "#a5d6a7"; // carbon
+}
+
+function lightenHex(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgb(${Math.round(r + (255 - r) * 0.6)},${Math.round(g + (255 - g) * 0.6)},${Math.round(b + (255 - b) * 0.6)})`;
+}
+
+function getCarriedResourceColor(inventory: Partial<Record<string, number>>): string {
+  let maxAmt = 0;
+  let topRes = "";
+  for (const [res, amt] of Object.entries(inventory)) {
+    if ((amt ?? 0) > maxAmt) { maxAmt = amt ?? 0; topRes = res; }
+  }
+  return topRes ? getRouteColor(topRes) : "#aaaaaa";
+}
+
+function drawWorkerTriangle(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  size: number,
+  angle: number,
+  bob: number,
+  bandColor: string | null,
+  alpha: number,
+  now: number,
+) {
+  // SVG viewBox is 220x220; centroid of outer triangle at (110, 132.67)
+  const scale = size / 220;
+  const ox = 110, oy = 132.67;
+
+  const pts = (raw: [number, number][]): [number, number][] =>
+    raw.map(([x, y]) => [(x - ox) * scale, (y - oy) * scale]);
+
+  const outer = pts([[110, 22], [30, 188], [190, 188]]);
+  const frame = pts([[110, 49.64], [49.10, 176], [170.90, 176]]);
+  const core  = pts([[110, 87.28], [74.01, 162], [145.99, 162]]);
+
+  const tri = (verts: [number, number][]) => {
+    ctx.moveTo(verts[0][0], verts[0][1]);
+    ctx.lineTo(verts[1][0], verts[1][1]);
+    ctx.lineTo(verts[2][0], verts[2][1]);
+    ctx.closePath();
+  };
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle + Math.PI / 2);
+  ctx.translate(0, bob); // bob along local forward axis
+  ctx.globalAlpha = alpha;
+
+  // Outer shell
+  ctx.beginPath(); tri(outer);
+  ctx.fillStyle = "#8f969d";
+  ctx.strokeStyle = "#5f666d";
+  ctx.lineWidth = 4 * scale;
+  ctx.fill(); ctx.stroke();
+
+  // Resource band
+  if (bandColor) {
+    const shimmerX = (((now % 3200) / 3200) * 360 - 180) * scale;
+    const grad = ctx.createLinearGradient(shimmerX - 40 * scale, 0, shimmerX + 40 * scale, 0);
+    const light = lightenHex(bandColor);
+    grad.addColorStop(0,    bandColor);
+    grad.addColorStop(0.35, bandColor);
+    grad.addColorStop(0.5,  light);
+    grad.addColorStop(0.65, bandColor);
+    grad.addColorStop(1,    bandColor);
+    ctx.beginPath(); tri(frame);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 7 * scale;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+  }
+
+  // Inner core
+  ctx.beginPath(); tri(core);
+  ctx.fillStyle = "rgba(46,52,58,0.22)";
+  ctx.fill();
+
+  // Bob — offset along forward axis (local -y, already in rotated space before translate)
+  // Applied as a translate on the y-axis before drawing; easier to offset cy instead.
+  // (bob is already folded into cy by caller)
+
+  ctx.restore();
 }
 
 function formatMaterialName(mat: string): string {
@@ -401,6 +488,139 @@ export function MapCanvas() {
         }
       }
 
+      // ── Helper: draw area shape using offscreen compositing ──
+      // Renders the true resulting shape (order-dependent: last rect wins),
+      // so the visual exactly matches what workers will use.
+      const drawAreaShape = (rects: AreaRect[], color: string, isSelected: boolean) => {
+        if (rects.length === 0) return;
+        const hex = color.replace("#", "");
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const fillAlpha = isSelected ? 0.18 : 0.11;
+
+        // Paint the shape onto an offscreen canvas, then composite onto main.
+        const off = document.createElement("canvas");
+        off.width = w; off.height = h;
+        const offCtx = off.getContext("2d")!;
+
+        for (const rect of rects) {
+          const rx = (rect.x1 - cam.x) * ts;
+          const ry = (rect.y1 - cam.y) * ts;
+          const rw = (rect.x2 - rect.x1 + 1) * ts;
+          const rh = (rect.y2 - rect.y1 + 1) * ts;
+          if (rect.op === "add") {
+            offCtx.globalCompositeOperation = "source-over";
+            offCtx.fillStyle = `rgba(${r},${g},${b},${fillAlpha})`;
+            offCtx.fillRect(rx, ry, rw, rh);
+          } else {
+            // Erase pixels — removes the sub region from the painted shape
+            offCtx.globalCompositeOperation = "destination-out";
+            offCtx.fillStyle = "rgba(0,0,0,1)";
+            offCtx.fillRect(rx, ry, rw, rh);
+          }
+        }
+        ctx.drawImage(off, 0, 0);
+
+        // Border: dashed outline on add-rects only (sub-rects are invisible holes)
+        const borderAlpha = isSelected ? 0.9 : 0.6;
+        ctx.strokeStyle = `rgba(${r},${g},${b},${borderAlpha})`;
+        ctx.lineWidth = isSelected ? 2 : 1.5;
+        ctx.setLineDash([4, 3]);
+        for (const rect of rects) {
+          if (rect.op !== "add") continue;
+          const rx = (rect.x1 - cam.x) * ts;
+          const ry = (rect.y1 - cam.y) * ts;
+          const rw = (rect.x2 - rect.x1 + 1) * ts;
+          const rh = (rect.y2 - rect.y1 + 1) * ts;
+          ctx.strokeRect(rx, ry, rw, rh);
+        }
+        ctx.setLineDash([]);
+      };
+
+      // ── Named Work Areas ──
+      if (state.workAreas.length > 0) {
+        for (const area of state.workAreas) {
+          if (!area.rects || area.rects.length === 0) continue;
+          const isSelected = state.selectedAreaId === area.id;
+
+          drawAreaShape(area.rects, area.color, isSelected);
+
+          // Compute bounding box of "add" rects for label placement
+          const addRects = area.rects.filter((rec) => rec.op === "add");
+          if (addRects.length === 0) continue;
+          const bx1 = Math.min(...addRects.map((rec) => rec.x1));
+          const by1 = Math.min(...addRects.map((rec) => rec.y1));
+          const labelSx = (bx1 - cam.x) * ts;
+          const labelSy = (by1 - cam.y) * ts;
+
+          // Label with dark background
+          const label = area.name;
+          const fontSize = 10;
+          ctx.font = `${fontSize}px sans-serif`;
+          const textW = ctx.measureText(label).width;
+          const labelX = labelSx + 4;
+          const labelY = labelSy + 4;
+          ctx.fillStyle = "rgba(0,0,0,0.65)";
+          ctx.fillRect(labelX - 2, labelY - 1, textW + 4, fontSize + 2);
+          ctx.fillStyle = area.color;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.fillText(label, labelX, labelY);
+          ctx.textBaseline = "alphabetic";
+
+          // Worker count badge
+          const workerCount = state.workers.filter((wk) => wk.work_area_id === area.id).length;
+          if (workerCount > 0) {
+            const badge = `${workerCount}`;
+            ctx.font = "bold 9px sans-serif";
+            const bw = ctx.measureText(badge).width + 6;
+            const bxb = labelX + textW + 6;
+            const byb = labelY;
+            ctx.fillStyle = "rgba(0,0,0,0.65)";
+            ctx.fillRect(bxb, byb - 1, bw, fontSize + 2);
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText(badge, bxb + 3, byb);
+            ctx.textBaseline = "alphabetic";
+          }
+        }
+      }
+
+      // ── Pending area rects preview (during edit session) ──
+      if (state.editingAreaId !== null && state.pendingAreaRects.length > 0) {
+        // Render preview using same compositing so user sees the true resulting shape
+        drawAreaShape(state.pendingAreaRects, "#4fc3f7", true);
+      }
+
+      // ── Work area draw rectangle preview (live drag) ──
+      if (state.workAreaDrawMode && state.editingAreaId !== null) {
+        const mAction = mouseActionRef.current;
+        if (mAction.type === "area") {
+          const end = routeDragEndRef.current;
+          if (end) {
+            const startSx = (mAction.startTileX - cam.x) * ts;
+            const startSy = (mAction.startTileY - cam.y) * ts;
+            const endTile = screenToTile(end.x, end.y);
+            const endSx = (endTile.x + 1 - cam.x) * ts;
+            const endSy = (endTile.y + 1 - cam.y) * ts;
+            const dragRx = Math.min(startSx, endSx);
+            const dragRy = Math.min(startSy, endSy);
+            const dragRw = Math.abs(endSx - startSx);
+            const dragRh = Math.abs(endSy - startSy);
+            const isAdd = state.workAreaEditMode === "add";
+            ctx.fillStyle = isAdd ? "rgba(79,195,247,0.1)" : "rgba(239,83,80,0.1)";
+            ctx.fillRect(dragRx, dragRy, dragRw, dragRh);
+            ctx.strokeStyle = isAdd ? "#4fc3f7" : "#ef5350";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 3]);
+            ctx.strokeRect(dragRx, dragRy, dragRw, dragRh);
+            ctx.setLineDash([]);
+          }
+        }
+      }
+
       // ── Build-mode cursor validation & territory preview ──
       if (state.buildMode && playerId) {
         const bClass = state.buildMode as BuildingClass;
@@ -615,7 +835,7 @@ export function MapCanvas() {
         const isSelected = wk.entity_id === state.selectedWorkerId;
         const isMovingWorker = wk.state === "moving_to_pickup" || wk.state === "moving_to_dropoff" ||
                                wk.state === "returning_to_base" || wk.state === "moving_to_construct";
-        const spriteSize = Math.max(22, ts * 0.875);
+        const spriteSize = Math.max(11, ts * 0.44);
         const radius = Math.max(3, ts * 0.12);
 
         // ── Angle: smooth angular lerp toward movement direction ──
@@ -644,35 +864,14 @@ export function MapCanvas() {
           ctx.stroke();
         }
 
-        const activeSprite = carrying ? workerCarryingCanvas : workerSpriteCanvas;
-        if (activeSprite) {
-          // Bob along local forward axis (movement direction)
-          const bob = isMovingWorker
-            ? Math.sin(now / 250 + wx * 0.5 + wy * 0.5) * Math.min(3, ts * 0.06)
-            : 0;
-          ctx.save();
-          ctx.translate(cx, cy);
-          // Sprite faces south by default; subtract π/2 to align with atan2 east=0 convention
-          ctx.rotate(displayAngle + Math.PI / 2);
-          ctx.globalAlpha = isInactive ? 0.4 : 1.0;
-          ctx.drawImage(
-            activeSprite,
-            -spriteSize / 2,
-            -spriteSize / 2 + bob,
-            spriteSize,
-            spriteSize
-          );
-          ctx.restore();
-        } else {
-          // Fallback circle while sprite is loading
-          ctx.beginPath();
-          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-          ctx.fillStyle = isInactive ? "#555" : carrying ? "#ffd54f" : "#bbb";
-          ctx.fill();
-          ctx.strokeStyle = isSelected ? "#4fc3f7" : "rgba(0,0,0,0.6)";
-          ctx.lineWidth = isSelected ? 1.5 : 1;
-          ctx.stroke();
-        }
+        const bob = isMovingWorker
+          ? Math.sin(now / 250 + wx * 0.5 + wy * 0.5) * Math.min(3, ts * 0.06)
+          : 0;
+        const bandColor = carrying ? getCarriedResourceColor(wk.inventory) : null;
+        drawWorkerTriangle(
+          ctx, cx, cy, spriteSize, displayAngle, bob,
+          bandColor, isInactive ? 0.4 : 1.0, now,
+        );
       }
 
       // ── Draw ambassadors ──
@@ -815,17 +1014,18 @@ export function MapCanvas() {
           const swFilter = state.pendingWorkerFilter?.workerId === sw.entity_id
             ? state.pendingWorkerFilter.filter
             : sw.task_filter;
-          if (swFilter?.area) {
-            const a = swFilter.area;
-            const ax = (a.x1 - cam.x) * ts;
-            const ay = (a.y1 - cam.y) * ts;
-            const aw = (a.x2 - a.x1 + 1) * ts;
-            const ah = (a.y2 - a.y1 + 1) * ts;
-            ctx.strokeStyle = "#ef5350";
-            ctx.lineWidth = 2;
-            ctx.setLineDash([6, 3]);
-            ctx.strokeRect(ax, ay, aw, ah);
-            ctx.setLineDash([]);
+          if (swFilter?.area && swFilter.area.length > 0) {
+            for (const a of swFilter.area) {
+              const ax = (a.x1 - cam.x) * ts;
+              const ay = (a.y1 - cam.y) * ts;
+              const aw = (a.x2 - a.x1 + 1) * ts;
+              const ah = (a.y2 - a.y1 + 1) * ts;
+              ctx.strokeStyle = a.op === "sub" ? "#ff9800" : "#ef5350";
+              ctx.lineWidth = 2;
+              ctx.setLineDash([6, 3]);
+              ctx.strokeRect(ax, ay, aw, ah);
+              ctx.setLineDash([]);
+            }
           }
         }
       }
@@ -886,6 +1086,14 @@ export function MapCanvas() {
     const state = storeRef.current;
     const sx = e.nativeEvent.offsetX;
     const sy = e.nativeEvent.offsetY;
+
+    // Work area draw mode
+    if (state.workAreaDrawMode) {
+      const tile = screenToTile(sx, sy);
+      mouseActionRef.current = { type: "area", startTileX: tile.x, startTileY: tile.y };
+      routeDragEndRef.current = { x: sx, y: sy };
+      return;
+    }
 
     // Area draw mode
     if (state.areaDrawMode) {
@@ -1107,22 +1315,29 @@ export function MapCanvas() {
       const x2 = Math.max(action.startTileX, endTile.x);
       const y2 = Math.max(action.startTileY, endTile.y);
 
-      const workerId = state.areaDrawMode;
-      if (workerId) {
-        const worker = state.workers.find((wk) => wk.entity_id === workerId);
-        if (worker) {
-          const existingFilter = (state.pendingWorkerFilter?.workerId === workerId
-            ? state.pendingWorkerFilter.filter
-            : worker.task_filter) ?? {};
-          const newFilter = { ...existingFilter, area: { x1, y1, x2, y2 } };
-          state.setPendingWorkerFilter(workerId, newFilter);
-          submitCommand("configure_worker", {
-            worker_id: workerId,
-            task_filter: newFilter,
-          });
+      if (state.workAreaDrawMode && state.editingAreaId !== null) {
+        // Named work area draw — append rect, stay in draw mode
+        const newRect: AreaRect = { x1, y1, x2, y2, op: state.workAreaEditMode };
+        state.setPendingAreaRects([...state.pendingAreaRects, newRect]);
+        // DON'T set workAreaDrawMode to false — stay in draw mode for more rects
+      } else {
+        const workerId = state.areaDrawMode;
+        if (workerId) {
+          const worker = state.workers.find((wk) => wk.entity_id === workerId);
+          if (worker) {
+            const existingFilter = (state.pendingWorkerFilter?.workerId === workerId
+              ? state.pendingWorkerFilter.filter
+              : worker.task_filter) ?? {};
+            const newFilter = { ...existingFilter, area: [{ x1, y1, x2, y2, op: "add" as const }] };
+            state.setPendingWorkerFilter(workerId, newFilter);
+            submitCommand("configure_worker", {
+              worker_id: workerId,
+              task_filter: newFilter,
+            });
+          }
         }
+        state.setAreaDrawMode(null);
       }
-      state.setAreaDrawMode(null);
       routeDragEndRef.current = null;
     }
 
@@ -1177,6 +1392,9 @@ export function MapCanvas() {
       if (e.key === "Escape") {
         state.setBuildMode(null);
         state.setAreaDrawMode(null);
+        state.setWorkAreaDrawMode(false);
+        state.setEditingAreaId(null);
+        state.setPendingAreaRects([]);
         state.setRoutePickerTarget(null);
         state.setAmbassadorTargetMode(null);
         state.setAutoMissionTargetMode(null);
@@ -1235,6 +1453,15 @@ export function MapCanvas() {
         touchModeRef.current = "potential-tap";
 
         const state = storeRef.current;
+
+        // Work area draw mode
+        if (state.workAreaDrawMode) {
+          const tile = screenToTile(pos.x, pos.y);
+          mouseActionRef.current = { type: "area", startTileX: tile.x, startTileY: tile.y };
+          routeDragEndRef.current = { x: pos.x, y: pos.y };
+          touchModeRef.current = "area";
+          return;
+        }
 
         // Area draw mode
         if (state.areaDrawMode) {
@@ -1463,22 +1690,28 @@ export function MapCanvas() {
             const x2 = Math.max(action.startTileX, endTile.x);
             const y2 = Math.max(action.startTileY, endTile.y);
             const state = storeRef.current;
-            const workerId = state.areaDrawMode;
-            if (workerId) {
-              const worker = state.workers.find((wk) => wk.entity_id === workerId);
-              if (worker) {
-                const existingFilter = (state.pendingWorkerFilter?.workerId === workerId
-                  ? state.pendingWorkerFilter.filter
-                  : worker.task_filter) ?? {};
-                const newFilter = { ...existingFilter, area: { x1, y1, x2, y2 } };
-                state.setPendingWorkerFilter(workerId, newFilter);
-                submitCommand("configure_worker", {
-                  worker_id: workerId,
-                  task_filter: newFilter,
-                });
+            if (state.workAreaDrawMode && state.editingAreaId !== null) {
+              const newRect: AreaRect = { x1, y1, x2, y2, op: state.workAreaEditMode };
+              state.setPendingAreaRects([...state.pendingAreaRects, newRect]);
+              // DON'T set workAreaDrawMode to false — stay in draw mode for more rects
+            } else {
+              const workerId = state.areaDrawMode;
+              if (workerId) {
+                const worker = state.workers.find((wk) => wk.entity_id === workerId);
+                if (worker) {
+                  const existingFilter = (state.pendingWorkerFilter?.workerId === workerId
+                    ? state.pendingWorkerFilter.filter
+                    : worker.task_filter) ?? {};
+                  const newFilter = { ...existingFilter, area: [{ x1, y1, x2, y2, op: "add" as const }] };
+                  state.setPendingWorkerFilter(workerId, newFilter);
+                  submitCommand("configure_worker", {
+                    worker_id: workerId,
+                    task_filter: newFilter,
+                  });
+                }
               }
+              state.setAreaDrawMode(null);
             }
-            state.setAreaDrawMode(null);
           }
         }
         routeDragEndRef.current = null;
@@ -1506,7 +1739,9 @@ export function MapCanvas() {
   let cursor = "grab";
   if (state.buildMode) cursor = "crosshair";
   else if (state.areaDrawMode) cursor = "crosshair";
-  else if (state.ambassadorTargetMode) cursor = "crosshair";
+  else if (state.workAreaDrawMode && state.editingAreaId !== null) {
+    cursor = state.workAreaEditMode === "sub" ? "cell" : "crosshair";
+  } else if (state.ambassadorTargetMode) cursor = "crosshair";
   else if (state.autoMissionTargetMode) cursor = "crosshair";
   else if (mouseActionRef.current.type === "panning") cursor = "grabbing";
 
@@ -1554,6 +1789,19 @@ export function MapCanvas() {
           <button
             className="build-mode-cancel"
             onClick={() => state.setAreaDrawMode(null)}
+          >
+            &#x2715;
+          </button>
+        </div>
+      )}
+
+      {/* Work area draw banner */}
+      {state.workAreaDrawMode && (
+        <div className="area-draw-indicator">
+          <span>Draw work area — click &amp; drag</span>
+          <button
+            className="build-mode-cancel"
+            onClick={() => state.setWorkAreaDrawMode(false)}
           >
             &#x2715;
           </button>

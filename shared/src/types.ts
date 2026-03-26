@@ -191,10 +191,15 @@ export type WorkerState = "idle" | "moving_to_pickup" | "picking_up" | "moving_t
 
 export type WorkerStatus = "active" | "inactive";
 
+export interface AreaRect {
+  x1: number; y1: number; x2: number; y2: number;
+  op: "add" | "sub";
+}
+
 export interface WorkerFilter {
   task_types?: WorkerTaskType[];
   resources?: MaterialType[];
-  area?: { x1: number; y1: number; x2: number; y2: number };
+  area?: AreaRect[];
 }
 
 export interface Worker {
@@ -209,6 +214,17 @@ export interface Worker {
   worker_status: WorkerStatus;
   current_task_id?: string;
   task_filter?: WorkerFilter;
+  work_area_id?: string;
+}
+
+// ── Work Area ──
+
+export interface WorkArea {
+  id: string;
+  name: string;
+  map_key: MapKey;
+  rects: AreaRect[];
+  color: string;
 }
 
 // ── Market ──
@@ -233,6 +249,7 @@ export interface Player {
   research: string[];
   tutorial_step?: number;
   bankrupt?: boolean;
+  work_areas?: WorkArea[];
 }
 
 // ── Ambassador ──
@@ -318,7 +335,10 @@ export type CommandType =
   | "send_ambassador"
   | "set_auto_mission"
   | "acknowledge_bankrupt"
-  | "initiate_expansion";
+  | "initiate_expansion"
+  | "upsert_work_area"
+  | "delete_work_area"
+  | "assign_worker_work_area";
 
 export interface Command {
   id: string;

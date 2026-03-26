@@ -133,6 +133,7 @@ function fullBankruptcy(store: WorldStore, player: Player) {
   player.map_accounts = {};
   player.research = [];
   player.tutorial_step = 1;
+  player.work_areas = [];
   player.bankrupt = true;
 
   store.pushEvent("player_bankrupt", {

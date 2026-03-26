@@ -43,6 +43,7 @@ export function WorkerDetail() {
   const pendingWorkerFilter = useGameStore((s) => s.pendingWorkerFilter);
   const setPendingWorkerFilter = useGameStore((s) => s.setPendingWorkerFilter);
   const addNotification = useGameStore((s) => s.addNotification);
+  const workAreas = useGameStore((s) => s.workAreas);
 
   if (!selectedWorkerId) return null;
   if (areaDrawMode) return null;
@@ -230,25 +231,40 @@ export function WorkerDetail() {
           </div>
         )}
 
-        {/* Activity area */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
-          <span style={{ color: "var(--text-muted)" }}>Area:</span>
-          {filter?.area ? (
-            <>
-              <span className="mono" style={{ color: "var(--text-secondary)" }}>
-                ({filter.area.x1},{filter.area.y1})-({filter.area.x2},{filter.area.y2})
-              </span>
-              <button className="btn btn-sm" onClick={() => applyFilter({ ...filter, area: undefined })}>Clear</button>
-            </>
-          ) : (
-            <span style={{ color: "var(--text-muted)" }}>Entire map</span>
-          )}
-          <button
-            className={`btn btn-sm ${areaDrawMode === worker.entity_id ? "btn-danger" : "btn-accent"}`}
-            onClick={() => setAreaDrawMode(areaDrawMode === worker.entity_id ? null : worker.entity_id)}
+        {/* Work Area assignment */}
+        <div style={{ marginTop: 6, fontSize: 11 }}>
+          <span style={{ color: "var(--text-muted)" }}>Work Area:</span>
+          <select
+            value={worker.work_area_id ?? "__none__"}
+            onChange={(e) => {
+              const val = e.target.value;
+              submitCommand("assign_worker_work_area", {
+                worker_id: worker.entity_id,
+                work_area_id: val === "__none__" ? null : val,
+              });
+            }}
+            style={{ marginLeft: 6, fontSize: 11, background: "var(--bg-panel)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: 3, padding: "1px 4px" }}
           >
-            {areaDrawMode === worker.entity_id ? "Cancel" : "Set Area"}
-          </button>
+            <option value="__none__">None (whole map)</option>
+            {workAreas.filter((a) => a.map_key === worker.map_key).map((area) => (
+              <option key={area.id} value={area.id}>{area.name}</option>
+            ))}
+          </select>
+          {/* Custom area override - only show if no work_area_id assigned */}
+          {!worker.work_area_id && (
+            <>
+              {filter?.area && (
+                <button className="btn btn-sm" style={{ marginLeft: 4 }} onClick={() => applyFilter({ ...filter, area: undefined })}>Clear</button>
+              )}
+              <button
+                className={`btn btn-sm ${areaDrawMode === worker.entity_id ? "btn-danger" : "btn-accent"}`}
+                style={{ marginLeft: 4 }}
+                onClick={() => setAreaDrawMode(areaDrawMode === worker.entity_id ? null : worker.entity_id)}
+              >
+                {areaDrawMode === worker.entity_id ? "Cancel" : filter?.area ? "Edit" : "Custom Area"}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Remove worker */}

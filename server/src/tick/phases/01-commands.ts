@@ -1,4 +1,5 @@
 import type {
+  AreaRect,
   AutoSellRule,
   BuildingClass,
   Command,
@@ -13,6 +14,7 @@ import type {
   QuantumRelayRule,
   ResourceType,
   RouteResource,
+  WorkArea,
   WorkerFilter,
 } from "@mars-2035/shared";
 import { remainingCapacity, WORKER_COST, BUILDING_DEFS, RESEARCH_TREE, RESOURCE_TYPES, IMPORT_PRICE_MULTIPLIER, MAP_EXPANSION_COST, DISTRICTS_X, DISTRICTS_Y, MAPS_PER_DISTRICT_X, MAPS_PER_DISTRICT_Y } from "@mars-2035/shared";
@@ -635,7 +637,7 @@ function handleSetMaxStock(store: WorldStore, player: Player, data: Record<strin
   if (!building) return { ok: false, error: "Building not found" };
   if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
 
-  if (amount >= 0 && amount < building.capacity) {
+  if (amount >= 0) {
     if (!building.max_stock) building.max_stock = {};
     building.max_stock[resource] = amount;
   } else {
@@ -770,6 +772,7 @@ function handleForfeit(store: WorldStore, player: Player, _data: Record<string, 
   player.map_accounts = {};
   player.research = [];
   player.tutorial_step = 1;
+  player.work_areas = [];
 
   return {
     ok: true,
@@ -945,6 +948,109 @@ function handleInitiateExpansion(store: WorldStore, player: Player, data: Record
   };
 }
 
+function handleUpsertWorkArea(_store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { id, name, map_key, rects, color } = data as {
+    id: string;
+    name: string;
+    map_key: string;
+    rects: AreaRect[];
+    color: string;
+  };
+
+  if (!player.work_areas) player.work_areas = [];
+
+  const existing = player.work_areas.find((a) => a.id === id);
+  if (existing) {
+    existing.name = name;
+    existing.rects = rects;
+    existing.color = color;
+    // Sync all workers assigned to this area
+    for (const worker of _store.workers.values()) {
+      if (worker.owner_id === player.entity_id && worker.work_area_id === id) {
+        if (!worker.task_filter) worker.task_filter = {};
+        worker.task_filter.area = rects;
+      }
+    }
+  } else {
+    const newArea: WorkArea = { id, name, map_key, rects, color };
+    player.work_areas.push(newArea);
+  }
+
+  return {
+    ok: true,
+    events: [{
+      type: "worker_spawned",
+      data: { area_id: id, owner_id: player.entity_id, upserted: true },
+      mapKey: map_key,
+    }],
+  };
+}
+
+function handleDeleteWorkArea(_store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { id } = data as { id: string };
+
+  if (!player.work_areas) return { ok: false, error: "No work areas" };
+
+  const area = player.work_areas.find((a) => a.id === id);
+  if (!area) return { ok: false, error: "Work area not found" };
+
+  const mapKey = area.map_key;
+
+  // Clear work_area_id and task_filter.area for all workers assigned to this area
+  for (const worker of _store.workers.values()) {
+    if (worker.owner_id === player.entity_id && worker.work_area_id === id) {
+      delete worker.work_area_id;
+      if (worker.task_filter) {
+        delete worker.task_filter.area;
+      }
+    }
+  }
+
+  player.work_areas = player.work_areas.filter((a) => a.id !== id);
+
+  return {
+    ok: true,
+    events: [{
+      type: "worker_spawned",
+      data: { area_id: id, owner_id: player.entity_id, deleted: true },
+      mapKey,
+    }],
+  };
+}
+
+function handleAssignWorkerWorkArea(_store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { worker_id, work_area_id } = data as {
+    worker_id: string;
+    work_area_id: string | null;
+  };
+
+  const worker = _store.workers.get(worker_id);
+  if (!worker) return { ok: false, error: "Worker not found" };
+  if (worker.owner_id !== player.entity_id) return { ok: false, error: "Not your worker" };
+
+  if (work_area_id === null) {
+    delete worker.work_area_id;
+    if (worker.task_filter) {
+      delete worker.task_filter.area;
+    }
+  } else {
+    const area = (player.work_areas ?? []).find((a) => a.id === work_area_id);
+    if (!area) return { ok: false, error: "Work area not found" };
+    worker.work_area_id = work_area_id;
+    if (!worker.task_filter) worker.task_filter = {};
+    worker.task_filter.area = area.rects;
+  }
+
+  return {
+    ok: true,
+    events: [{
+      type: "worker_spawned",
+      data: { worker_id, owner_id: player.entity_id, map_key: worker.map_key, configured: true },
+      mapKey: worker.map_key,
+    }],
+  };
+}
+
 // ── Handler registry ──
 
 const handlers: Record<CommandType, CommandHandler> = {
@@ -970,6 +1076,9 @@ const handlers: Record<CommandType, CommandHandler> = {
   set_auto_mission: handleSetAutoMission,
   acknowledge_bankrupt: handleAcknowledgeBankrupt,
   initiate_expansion: handleInitiateExpansion,
+  upsert_work_area: handleUpsertWorkArea,
+  delete_work_area: handleDeleteWorkArea,
+  assign_worker_work_area: handleAssignWorkerWorkArea,
 };
 
 // ── Main processor ──

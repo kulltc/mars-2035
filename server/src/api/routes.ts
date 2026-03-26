@@ -32,7 +32,10 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "send_ambassador",
   "set_auto_mission",
   "acknowledge_bankrupt",
-  "initiate_expansion"
+  "initiate_expansion",
+  "upsert_work_area",
+  "delete_work_area",
+  "assign_worker_work_area"
 ]);
 
 let commandCounter = 0;

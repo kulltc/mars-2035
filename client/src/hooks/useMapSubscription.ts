@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { connectMapWS, fetchMap } from "../api/client.js";
 import { useGameStore } from "../state/store.js";
-import type { Building, GameEvent, MarketPrices, Tile, Worker, TaxInfo, Ambassador } from "@mars-2035/shared";
+import type { Building, GameEvent, MarketPrices, Tile, Worker, TaxInfo, Ambassador, WorkArea } from "@mars-2035/shared";
 
 interface SnapshotMessage {
   type: "snapshot";
@@ -13,6 +13,7 @@ interface SnapshotMessage {
   ambassadors?: Ambassador[];
   market_prices: MarketPrices;
   tax_info?: TaxInfo;
+  work_areas?: WorkArea[];
 }
 
 interface EventsMessage {
@@ -24,6 +25,7 @@ interface EventsMessage {
   ambassadors?: Ambassador[];
   market_prices: MarketPrices;
   tax_info?: TaxInfo;
+  work_areas?: WorkArea[];
 }
 
 type WSMessage = SnapshotMessage | EventsMessage;
@@ -119,6 +121,7 @@ export function useMapSubscription() {
   const setTaxInfo = useGameStore((s) => s.setTaxInfo);
   const setAmbassadors = useGameStore((s) => s.setAmbassadors);
   const setWorld = useGameStore((s) => s.setWorld);
+  const setWorkAreas = useGameStore((s) => s.setWorkAreas);
 
   useEffect(() => {
     if (!currentMap || !token) return;
@@ -159,6 +162,7 @@ export function useMapSubscription() {
         if (msg.ambassadors) setAmbassadors(msg.ambassadors);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
         if (msg.tax_info) setTaxInfo(msg.tax_info);
+        if (msg.work_areas) setWorkAreas(msg.work_areas);
         // Update tick from snapshot
         if (msg.tick) {
           const world = useGameStore.getState().world;
@@ -171,6 +175,7 @@ export function useMapSubscription() {
         if (msg.ambassadors) setAmbassadors(msg.ambassadors);
         if (msg.market_prices) setMarketPrices(msg.market_prices);
         if (msg.tax_info) setTaxInfo(msg.tax_info);
+        if (msg.work_areas) setWorkAreas(msg.work_areas);
         // Generate notifications for important events
         notifyForEvents(msg.events);
         // Update tick from events
@@ -238,5 +243,5 @@ export function useMapSubscription() {
         wsRef.current = null;
       }
     };
-  }, [currentMap, token, setTiles, setBuildings, setWorkers, setAmbassadors, addEvents, setMarketPrices, setTaxInfo, setWorld]);
+  }, [currentMap, token, setTiles, setBuildings, setWorkers, setAmbassadors, addEvents, setMarketPrices, setTaxInfo, setWorld, setWorkAreas]);
 }

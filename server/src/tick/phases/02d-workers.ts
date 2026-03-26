@@ -35,6 +35,7 @@ function clearWorkerTask(store: WorldStore, worker: Worker, removeFromQueue = tr
 export function processWorkers(store: WorldStore) {
   // ── Task generation ──
   generatePickupTasks(store);
+  generateImpliedAdminOutpostTasks(store);
   generateConstructTasks(store);
 
   // ── Idle worker dispatch ──
@@ -370,6 +371,64 @@ function generatePickupTasks(store: WorldStore) {
   }
 }
 
+// For every resource in every building that has stock above buffer but no active user route,
+// generate an implied pickup task to the player's admin outpost.
+// An active user route is one where: the route covers the resource AND the destination
+// is not blocked by max_stock. When an active route exists, the implied route is suppressed.
+function generateImpliedAdminOutpostTasks(store: WorldStore) {
+  for (const building of store.buildings.values()) {
+    if (building.status === "constructing") continue;
+    if (building.class === "admin_outpost") continue;
+
+    const player = store.players.get(building.owner_id);
+    if (!player) continue;
+    const account = player.map_accounts[building.map_key];
+    const outpostId = account?.admin_outpost_building_id;
+    if (!outpostId || outpostId === building.entity_id) continue;
+    const outpost = store.buildings.get(outpostId);
+    if (!outpost) continue;
+
+    for (const res of MATERIAL_TYPES) {
+      if (res === "money") continue;
+
+      const available = (building.output_buffer?.[res] ?? 0) + (building.inventory[res] ?? 0);
+      const buffer = building.buffer_stock?.[res] ?? 0;
+      if (available - buffer <= 0) continue;
+
+      // Suppress implied route if there is an active user-configured route for this resource
+      const hasActiveRoute = building.outgoing_routes?.some((route) => {
+        const covers = route.resource === "all" || route.resource === res;
+        if (!covers) return false;
+        const dest = store.buildings.get(route.to_building_id);
+        if (!dest) return false;
+        const maxStock = dest.max_stock?.[res];
+        return maxStock === undefined || (dest.inventory[res] ?? 0) < maxStock;
+      }) ?? false;
+      if (hasActiveRoute) continue;
+
+      // Don't create a duplicate task
+      const exists = taskExists(store, "pickup", (t: PickupTask) =>
+        t.from_building_id === building.entity_id &&
+        t.to_building_id === outpostId &&
+        t.resource === res
+      );
+      if (exists) continue;
+
+      const taskId = `task_${++store.taskCounter}`;
+      const task: PickupTask = {
+        id: taskId,
+        type: "pickup",
+        owner_id: building.owner_id,
+        map_key: building.map_key,
+        from_building_id: building.entity_id,
+        to_building_id: outpostId,
+        resource: res,
+      };
+      store.taskQueue.set(taskId, task);
+    }
+  }
+}
+
 function generateConstructTasks(store: WorldStore) {
   for (const building of store.buildings.values()) {
     if (building.status !== "constructing") continue;
@@ -448,7 +507,7 @@ function matchesFilter(store: WorldStore, worker: Worker, task: WorkerTask): boo
   }
 
   // Area check — look up building location
-  if (filter.area) {
+  if (filter.area && filter.area.length > 0) {
     let building: { location: { x: number; y: number } } | undefined;
     if (task.type === "pickup") {
       building = store.buildings.get((task as PickupTask).from_building_id);
@@ -457,8 +516,15 @@ function matchesFilter(store: WorldStore, worker: Worker, task: WorkerTask): boo
     }
     if (building) {
       const { x, y } = building.location;
-      const a = filter.area;
-      if (x < a.x1 || x > a.x2 || y < a.y1 || y > a.y2) return false;
+      // Order-dependent: iterate rects in draw order, last one that contains the
+      // point wins. This lets users add → subtract → re-add sub-regions freely.
+      let included = false;
+      for (const r of filter.area) {
+        if (x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2) {
+          included = r.op === "add";
+        }
+      }
+      if (!included) return false;
     }
   }
 

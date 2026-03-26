@@ -450,16 +450,20 @@ export function BuildingDetail() {
             materials.add(route.resource);
           }
         }
-        if (materials.size === 0) return null;
-
-        // Split into priority (recipe inputs) and other
+        // Always include recipe inputs and output
         const recipeInputs = new Set<MaterialType>();
         const recipeDef = BUILDING_DEFS[building.class].recipe;
         if (recipeDef) {
           for (const [m, v] of Object.entries(recipeDef.inputs)) {
-            if (v && v > 0) recipeInputs.add(m as MaterialType);
+            if (v && v > 0) {
+              recipeInputs.add(m as MaterialType);
+              materials.add(m as MaterialType);
+            }
           }
+          if (recipeDef.output) materials.add(recipeDef.output as MaterialType);
         }
+
+        if (materials.size === 0) return null;
 
         const allSorted = [...materials].sort();
         const priority = allSorted.filter((m) => recipeInputs.has(m));
@@ -506,7 +510,7 @@ export function BuildingDetail() {
                     submitCommand("set_max_stock", {
                       building_id: building.entity_id,
                       resource: mat,
-                      amount: building.capacity,
+                      amount: -1,
                     });
                   } else {
                     const amount = Math.max(0, Math.round(Number(raw)));

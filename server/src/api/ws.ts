@@ -63,6 +63,8 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
       // Send initial snapshot (filtered per player) — tiles served via REST
       const { buildings: filteredBuildings, workers: filteredWorkers, ambassadors: filteredAmbassadors } =
         filterStateForPlayer(playerId, store.getBuildingsByMap(mapKey), store.getWorkersByMap(mapKey), store.getAmbassadorsByMap(mapKey));
+      const snapshotPlayer = store.players.get(playerId);
+      const snapshotWorkAreas = (snapshotPlayer?.work_areas ?? []).filter((a) => a.map_key === mapKey);
       socket.send(
         JSON.stringify({
           type: "snapshot",
@@ -73,6 +75,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
           ambassadors: filteredAmbassadors,
           market_prices: store.marketPrices,
           tax_info: computeTaxInfo(store, mapKey),
+          work_areas: snapshotWorkAreas,
         })
       );
 
@@ -80,6 +83,8 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
       const unsub = store.subscribe(mapKey, (events: GameEvent[], buildings, workers: Worker[], ambassadors: Ambassador[]) => {
         if (socket.readyState === 1) {
           const filtered = filterStateForPlayer(playerId, buildings, workers, ambassadors);
+          const eventPlayer = store.players.get(playerId);
+          const eventWorkAreas = (eventPlayer?.work_areas ?? []).filter((a) => a.map_key === mapKey);
           socket.send(
             JSON.stringify({
               type: "events",
@@ -90,6 +95,7 @@ export function registerWebSocket(app: FastifyInstance, store: WorldStore) {
               ambassadors: filtered.ambassadors,
               market_prices: store.marketPrices,
               tax_info: computeTaxInfo(store, mapKey),
+              work_areas: eventWorkAreas,
             })
           );
         }
