@@ -73,6 +73,7 @@ export interface Tile {
 
 export const BUILDING_CLASSES = [
   "admin_outpost",
+  "warehouse",
   "infra_tower",
   "research_station",
   "research_lab",

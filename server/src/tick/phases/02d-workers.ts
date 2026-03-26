@@ -1,5 +1,6 @@
 import {
   type MaterialType,
+  type Building,
   type Worker,
   type WorkerTask,
   type PickupTask,
@@ -18,6 +19,33 @@ function findAdminOutpost(store: WorldStore, worker: Worker): string | undefined
   if (!player) return undefined;
   const account = player.map_accounts[worker.map_key];
   return account?.admin_outpost_building_id;
+}
+
+/**
+ * For a warehouse destination, redirect inventory writes to the Admin Outpost and
+ * compute pooled capacity (outpost + all active warehouses on same map).
+ * For all other buildings, returns the building and its own capacity unchanged.
+ */
+function resolveStorageDest(
+  dest: Building,
+  store: WorldStore,
+): { inventoryBuilding: Building; effectiveCapacity: number } {
+  if (dest.class !== "warehouse") {
+    return { inventoryBuilding: dest, effectiveCapacity: dest.capacity };
+  }
+  const player = store.players.get(dest.owner_id);
+  const outpostId = player?.map_accounts[dest.map_key]?.admin_outpost_building_id;
+  const outpost = outpostId ? store.buildings.get(outpostId) : undefined;
+  if (!outpost) {
+    return { inventoryBuilding: dest, effectiveCapacity: dest.capacity };
+  }
+  let warehouseCapacity = 0;
+  for (const b of store.buildings.values()) {
+    if (b.class === "warehouse" && b.owner_id === dest.owner_id && b.map_key === dest.map_key && b.status === "active") {
+      warehouseCapacity += b.capacity;
+    }
+  }
+  return { inventoryBuilding: outpost, effectiveCapacity: outpost.capacity + warehouseCapacity };
 }
 
 function getWorkerTask(store: WorldStore, worker: Worker): WorkerTask | undefined {
@@ -168,23 +196,25 @@ export function processWorkers(store: WorldStore) {
         const dest = store.buildings.get(task.building_id);
         if (!dest) { resetWorker(store, worker); break; }
 
+        const { inventoryBuilding: actualDest, effectiveCapacity } = resolveStorageDest(dest, store);
+
         const res = task.resource;
         const carrying = worker.inventory[res] ?? 0;
         // Money doesn't count toward storage capacity, so always allow it
-        let destRemaining = res === "money" ? carrying : remainingCapacity(dest.inventory, dest.capacity);
+        let destRemaining = res === "money" ? carrying : remainingCapacity(actualDest.inventory, effectiveCapacity);
         // Clamp by max_stock if set
-        const maxStock = dest.max_stock?.[res];
+        const maxStock = actualDest.max_stock?.[res];
         if (maxStock !== undefined) {
-          const currentAmount = dest.inventory[res] ?? 0;
+          const currentAmount = actualDest.inventory[res] ?? 0;
           destRemaining = Math.min(destRemaining, Math.max(0, maxStock - currentAmount));
         }
         const amount = Math.min(carrying, destRemaining);
 
         if (amount > 0) {
           worker.inventory[res] = (worker.inventory[res] ?? 0) - amount;
-          dest.inventory[res] = (dest.inventory[res] ?? 0) + amount;
+          actualDest.inventory[res] = (actualDest.inventory[res] ?? 0) + amount;
 
-          if (res === "money" && dest.class === "admin_outpost") {
+          if (res === "money" && actualDest.class === "admin_outpost") {
             const player = store.players.get(worker.owner_id);
             if (player?.tutorial_step === 5) {
               player.tutorial_step = 6;
@@ -372,21 +402,39 @@ function generatePickupTasks(store: WorldStore) {
 }
 
 // For every resource in every building that has stock above buffer but no active user route,
-// generate an implied pickup task to the player's admin outpost.
+// generate an implied pickup task to the nearest active storage node (warehouse or admin outpost).
 // An active user route is one where: the route covers the resource AND the destination
 // is not blocked by max_stock. When an active route exists, the implied route is suppressed.
 function generateImpliedAdminOutpostTasks(store: WorldStore) {
   for (const building of store.buildings.values()) {
     if (building.status === "constructing") continue;
     if (building.class === "admin_outpost") continue;
+    if (building.class === "warehouse") continue; // warehouse inventory is the outpost; skip to avoid loops
 
     const player = store.players.get(building.owner_id);
     if (!player) continue;
     const account = player.map_accounts[building.map_key];
     const outpostId = account?.admin_outpost_building_id;
     if (!outpostId || outpostId === building.entity_id) continue;
-    const outpost = store.buildings.get(outpostId);
-    if (!outpost) continue;
+
+    // Find the nearest active storage node (warehouse or admin outpost) on this map
+    let nearestDestId = outpostId;
+    let nearestDist = Infinity;
+    for (const b of store.buildings.values()) {
+      if (b.owner_id !== building.owner_id) continue;
+      if (b.map_key !== building.map_key) continue;
+      if (b.status !== "active") continue;
+      if (b.class !== "admin_outpost" && b.class !== "warehouse") continue;
+      if (b.entity_id === building.entity_id) continue;
+      const dist = Math.hypot(b.location.x - building.location.x, b.location.y - building.location.y);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestDestId = b.entity_id;
+      }
+    }
+
+    const destBuilding = store.buildings.get(nearestDestId);
+    if (!destBuilding) continue;
 
     for (const res of MATERIAL_TYPES) {
       if (res === "money") continue;
@@ -409,7 +457,7 @@ function generateImpliedAdminOutpostTasks(store: WorldStore) {
       // Don't create a duplicate task
       const exists = taskExists(store, "pickup", (t: PickupTask) =>
         t.from_building_id === building.entity_id &&
-        t.to_building_id === outpostId &&
+        t.to_building_id === nearestDestId &&
         t.resource === res
       );
       if (exists) continue;
@@ -421,7 +469,7 @@ function generateImpliedAdminOutpostTasks(store: WorldStore) {
         owner_id: building.owner_id,
         map_key: building.map_key,
         from_building_id: building.entity_id,
-        to_building_id: outpostId,
+        to_building_id: nearestDestId,
         resource: res,
       };
       store.taskQueue.set(taskId, task);

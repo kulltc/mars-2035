@@ -42,12 +42,21 @@ export const RESEARCH_TREE: Record<string, ResearchDef> = {
   // Logistics track
   storage_buildings: {
     id: "storage_buildings",
-    name: "Expanded Warehousing",
+    name: "Bulk Storage Modules",
     track: "logistics",
     cost: { ferrite_alloy: 8, thermoplast: 5 },
     requires: [],
-    description: "Increase all building storage capacity by 50%.",
+    description: "Increase all building storage capacity by 50%. Applies to all buildings including future constructions.",
     effect: { type: "building_capacity", multiplier: 1.5 },
+  },
+  unlock_warehouse: {
+    id: "unlock_warehouse",
+    name: "Forward Logistics",
+    track: "logistics",
+    cost: { money: 200, ferrite_alloy: 5, thermoplast: 5 },
+    requires: ["storage_buildings"],
+    description: "Place Warehouses on the map to expand Admin Outpost storage (+500 each) and give workers a nearby drop-off point. Resources delivered to any Warehouse are pooled into the Admin Outpost inventory.",
+    unlocks: "warehouse",
   },
   storage_workers: {
     id: "storage_workers",

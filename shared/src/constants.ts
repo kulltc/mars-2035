@@ -49,6 +49,7 @@ export interface BuildingDef {
 
 export const BUILDING_DEFS: Record<BuildingClass, BuildingDef> = {
   admin_outpost: { upkeep_per_tick: 0.1, cost: {}, capacity: 2000, build_ticks: 0 },
+  warehouse: { upkeep_per_tick: 0.2, cost: { money: 250, steel: 20 }, capacity: 500, build_ticks: 8 },
   infra_tower: { upkeep_per_tick: 1.0, cost: { money: 500, steel: 50 }, capacity: 100, build_ticks: 10 },
   research_lab: { upkeep_per_tick: 0.5, cost: { money: 300 }, capacity: 100, build_ticks: 8 },
   research_station: { upkeep_per_tick: 1.5, cost: { money: 1000, rare_earth: 100 }, capacity: 50, build_ticks: 15 },

@@ -155,6 +155,18 @@ export function BuildingDetail() {
   const used = totalInventory(building.inventory);
   const pct = building.capacity > 0 ? Math.min(100, (used / building.capacity) * 100) : 0;
 
+  // Warehouse: look up the linked Admin Outpost and compute pooled capacity
+  const warehouseOutpost = building.class === "warehouse"
+    ? buildings.find((b) => b.entity_id === player?.map_accounts[building.map_key]?.admin_outpost_building_id) ?? null
+    : null;
+  const warehousePooledCapacity = warehouseOutpost
+    ? warehouseOutpost.capacity + buildings
+        .filter((b) => b.class === "warehouse" && b.owner_id === building.owner_id && b.map_key === building.map_key && b.status === "active")
+        .reduce((sum, b) => sum + b.capacity, 0)
+    : 0;
+  const warehousePooledUsed = warehouseOutpost ? totalInventory(warehouseOutpost.inventory) : 0;
+  const warehousePooledPct = warehousePooledCapacity > 0 ? Math.min(100, (warehousePooledUsed / warehousePooledCapacity) * 100) : 0;
+
   const getEffectiveRule = (res: ResourceType): AutoSellRule | null => {
     if (res in localAutoSell) return localAutoSell[res] ?? null;
     return building.auto_sell?.[res] ?? null;
@@ -232,7 +244,30 @@ export function BuildingDetail() {
       )}
 
       {/* Storage bar */}
-      {building.capacity > 0 && (
+      {building.class === "warehouse" ? (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+            Inventory shared with Admin Outpost · adds {building.capacity} to pool
+          </div>
+          {warehouseOutpost && (
+            <>
+              <div className="capacity-label">
+                <span>Pooled Storage (outpost + warehouses)</span>
+                <span className="mono">{warehousePooledUsed.toFixed(0)}/{warehousePooledCapacity}</span>
+              </div>
+              <div className="capacity-bar">
+                <div
+                  className="capacity-bar-fill"
+                  style={{
+                    width: `${warehousePooledPct}%`,
+                    background: warehousePooledPct > 90 ? "var(--danger)" : warehousePooledPct > 60 ? "var(--warning)" : "var(--success)",
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      ) : building.capacity > 0 ? (
         <div style={{ marginTop: 8 }}>
           <div className="capacity-label">
             <span>Storage</span>
@@ -248,7 +283,7 @@ export function BuildingDetail() {
             />
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Output buffer bar */}
       {def.output_capacity && building.output_buffer && (() => {
@@ -275,11 +310,13 @@ export function BuildingDetail() {
 
       {/* Inventory */}
       {(() => {
-        const entries = Object.entries(building.inventory).filter(([, v]) => v && v > 0);
+        const inv = building.class === "warehouse" && warehouseOutpost ? warehouseOutpost.inventory : building.inventory;
+        const label = building.class === "warehouse" ? "Admin Outpost Inventory" : "Inventory";
+        const entries = Object.entries(inv).filter(([, v]) => v && v > 0);
         if (entries.length === 0) return null;
         return (
           <div className="bd-section">
-            <div className="bd-section-title">Inventory</div>
+            <div className="bd-section-title">{label}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
               {entries.map(([mat, amt]) => (
                 <div key={mat} style={{ fontSize: 12 }}>
@@ -296,8 +333,8 @@ export function BuildingDetail() {
         );
       })()}
 
-      {/* Routes */}
-      <div className="bd-section">
+      {/* Routes — not applicable for warehouses (they are delivery targets, not sources) */}
+      {building.class !== "warehouse" && <div className="bd-section">
         <div className="bd-section-title">Routes</div>
         {effectiveRoutes.length === 0 ? (
           <div className="route-hint">Drag from this building to another to create a route</div>
@@ -323,7 +360,7 @@ export function BuildingDetail() {
             );
           })
         )}
-      </div>
+      </div>}
 
       {/* Quantum relay rules */}
       {building.class === "quantum_relay" && (

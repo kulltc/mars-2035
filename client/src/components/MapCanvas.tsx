@@ -73,6 +73,7 @@ const RESOURCE_COLORS: Record<string, string> = {
 
 const BUILDING_COLORS: Record<string, string> = {
   admin_outpost: "#4fc3f7",
+  warehouse: "#4f8fbf",
   infra_tower: "#26c6da",
   research_lab: "#7e57c2",
   research_station: "#ab47bc",
@@ -91,7 +92,7 @@ const BUILDING_COLORS: Record<string, string> = {
 };
 
 const BUILDING_ICONS: Record<string, string> = {
-  admin_outpost: "⌂", infra_tower: "△", research_lab: "⚗", research_station: "◉",
+  admin_outpost: "⌂", warehouse: "▦", infra_tower: "△", research_lab: "⚗", research_station: "◉",
   mine: "⛏", port: "$",
   smelter: "♨", magnetic_press: "⌬", morphic_forge: "⚒",
   servo_assembly: "⚙", replication_chamber: "⧉",
@@ -106,7 +107,7 @@ const BUILDING_ICONS: Record<string, string> = {
 };
 
 export const DISPLAY_NAMES: Record<string, string> = {
-  admin_outpost: "Admin Outpost", infra_tower: "Infra Tower", research_lab: "Research Lab", research_station: "Research Station",
+  admin_outpost: "Admin Outpost", warehouse: "Warehouse", infra_tower: "Infra Tower", research_lab: "Research Lab", research_station: "Research Station",
   mine: "Mine", port: "Trade Center",
   smelter: "Smelter", magnetic_press: "Magnetic Press", morphic_forge: "Morphic Forge",
   servo_assembly: "Servo Assembly", replication_chamber: "Replication Chamber",

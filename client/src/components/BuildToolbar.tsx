@@ -12,7 +12,7 @@ import { BottomSheet } from "./BottomSheet.js";
 import { LockIcon } from "./LockIcon.js";
 
 const BUILDING_ICONS: Record<string, string> = {
-  admin_outpost: "⌂", infra_tower: "△", research_lab: "⚗", research_station: "◉",
+  admin_outpost: "⌂", warehouse: "▦", infra_tower: "△", research_lab: "⚗", research_station: "◉",
   mine: "⛏", port: "$",
   smelter: "♨", magnetic_press: "⌬", morphic_forge: "⚒",
   servo_assembly: "⚙", replication_chamber: "⧉",
@@ -27,7 +27,7 @@ const BUILDING_ICONS: Record<string, string> = {
 };
 
 const BUILDING_COLORS: Record<string, string> = {
-  admin_outpost: "#4fc3f7", infra_tower: "#26c6da", research_lab: "#7e57c2", research_station: "#ab47bc",
+  admin_outpost: "#4fc3f7", warehouse: "#4f8fbf", infra_tower: "#26c6da", research_lab: "#7e57c2", research_station: "#ab47bc",
   mine: "#ffb74d", port: "#81c784",
   smelter: "#e65100", magnetic_press: "#d84315", morphic_forge: "#bf360c",
   servo_assembly: "#a52714", replication_chamber: "#8b1a1a",
@@ -42,7 +42,7 @@ const BUILDING_COLORS: Record<string, string> = {
 };
 
 const BUILD_SECTIONS: { label: string; color: string; items: BuildingClass[] }[] = [
-  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "infra_tower", "research_lab", "research_station", "mine", "port", "quantum_relay", "embassy"] },
+  { label: "Core", color: "#4fc3f7", items: ["admin_outpost", "warehouse", "infra_tower", "research_lab", "research_station", "mine", "port", "quantum_relay", "embassy"] },
   { label: "Morphic", color: "#e65100", items: ["smelter", "magnetic_press", "morphic_forge", "servo_assembly", "replication_chamber"] },
   { label: "Toroidin", color: "#7b1fa2", items: ["polymer_kiln", "crystal_grower", "toroidin_foundry", "muphrid_lab", "solar_loom"] },
   { label: "Cryogenic", color: "#00838f", items: ["cryo_distillery", "phase_condenser", "xenotherm_reactor", "deep_freeze_synth", "iceworld_refinery"] },

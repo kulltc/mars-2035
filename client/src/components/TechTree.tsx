@@ -4,7 +4,7 @@ import { BUILDING_DEFS, type BuildingClass } from "@mars-2035/shared";
 import { DISPLAY_NAMES } from "./MapCanvas.js";
 
 const BUILDING_COLORS: Record<string, string> = {
-  admin_outpost: "#4fc3f7", infra_tower: "#26c6da", research_lab: "#7e57c2", research_station: "#ab47bc",
+  admin_outpost: "#4fc3f7", warehouse: "#4f8fbf", infra_tower: "#26c6da", research_lab: "#7e57c2", research_station: "#ab47bc",
   mine: "#ffb74d", port: "#81c784",
   smelter: "#e65100", magnetic_press: "#d84315", morphic_forge: "#bf360c",
   servo_assembly: "#a52714", replication_chamber: "#8b1a1a",
@@ -18,7 +18,7 @@ const BUILDING_COLORS: Record<string, string> = {
 };
 
 const CHAIN_SECTIONS: { label: string; color: string; items: BuildingClass[] }[] = [
-  { label: "Core Buildings", color: "#4fc3f7", items: ["admin_outpost", "mine", "port", "infra_tower", "research_lab", "research_station", "quantum_relay"] },
+  { label: "Core Buildings", color: "#4fc3f7", items: ["admin_outpost", "warehouse", "mine", "port", "infra_tower", "research_lab", "research_station", "quantum_relay"] },
   { label: "Morphic Chain", color: "#e65100", items: ["smelter", "magnetic_press", "morphic_forge", "servo_assembly", "replication_chamber"] },
   { label: "Toroidin Chain", color: "#7b1fa2", items: ["polymer_kiln", "crystal_grower", "toroidin_foundry", "muphrid_lab", "solar_loom"] },
   { label: "Cryogenic Chain", color: "#00838f", items: ["cryo_distillery", "phase_condenser", "xenotherm_reactor", "deep_freeze_synth", "iceworld_refinery"] },
@@ -27,6 +27,7 @@ const CHAIN_SECTIONS: { label: string; color: string; items: BuildingClass[] }[]
 
 const CORE_DESCRIPTIONS: Record<string, string> = {
   admin_outpost: "Free hub building. Required on each map. Stores all materials.",
+  warehouse: "Expands Admin Outpost storage pool by 500. Workers deliver here instead of the outpost when it's closer.",
   mine: "Place on resource tiles. Produces raw materials based on tile richness.",
   port: "Sells materials on the market. Configure auto-sell per material.",
   infra_tower: "Extends buildable area around it.",
