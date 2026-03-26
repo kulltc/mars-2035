@@ -40,6 +40,8 @@ export function TopBar() {
   const showMarket = useGameStore((s) => s.showMarket);
   const toggleWorkAreas = useGameStore((s) => s.toggleWorkAreas);
   const showWorkAreas = useGameStore((s) => s.showWorkAreas);
+  const toggleMonitoringPanel = useGameStore((s) => s.toggleMonitoringPanel);
+  const showMonitoringPanel = useGameStore((s) => s.showMonitoringPanel);
   const logout = useGameStore((s) => s.logout);
   const addNotification = useGameStore((s) => s.addNotification);
   const showMainMenu = useGameStore((s) => s.showMainMenu);
@@ -217,6 +219,9 @@ export function TopBar() {
           <button className="main-menu-item" onClick={() => { toggleMainMenu(); toggleWorkAreas(); }}>
             Work Areas
           </button>
+          <button className="main-menu-item" onClick={() => { toggleMainMenu(); toggleMonitoringPanel(); }}>
+            Monitoring
+          </button>
           <div className="main-menu-divider" />
         </>
       )}
@@ -307,6 +312,13 @@ export function TopBar() {
               title="Work Areas"
             >
               &#x25A3;
+            </button>
+            <button
+              className={`icon-btn ${showMonitoringPanel ? "active" : ""}`}
+              onClick={toggleMonitoringPanel}
+              title="Monitoring"
+            >
+              &#x25CE;
             </button>
           </>
         )}

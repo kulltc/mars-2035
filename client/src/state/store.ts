@@ -170,6 +170,10 @@ export interface GameState {
   expansionEmbassyId: string | null;
   setExpansionMode: (embassyId: string | null) => void;
 
+  // ── Monitoring panel ──
+  showMonitoringPanel: boolean;
+  toggleMonitoringPanel: () => void;
+
   // ── Work Areas ──
   workAreas: WorkArea[];
   setWorkAreas: (areas: WorkArea[]) => void;
@@ -374,6 +378,10 @@ export const useGameStore = create<GameState>((set) => ({
   // ── Map expansion mode ──
   expansionEmbassyId: null,
   setExpansionMode: (expansionEmbassyId) => set({ expansionEmbassyId }),
+
+  // ── Monitoring panel ──
+  showMonitoringPanel: false,
+  toggleMonitoringPanel: () => set((state) => ({ showMonitoringPanel: !state.showMonitoringPanel })),
 
   // ── Work Areas ──
   workAreas: [],

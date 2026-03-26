@@ -30,8 +30,36 @@ export function WorkAreasPanel() {
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState(AREA_COLORS[0]);
 
+  const player = useGameStore((s) => s.player);
+  const mapKey = currentMap
+    ? `${currentMap.dx}:${currentMap.dy}:${currentMap.mx}:${currentMap.my}`
+    : "";
+
   const getWorkerCount = (areaId: string) =>
     workers.filter((w) => w.work_area_id === areaId).length;
+
+  // Workers on this map belonging to the player with no work area assigned
+  const unassignedWorkers = workers.filter(
+    (w) => w.owner_id === player?.entity_id && w.map_key === mapKey && !w.work_area_id
+  );
+
+  const handleAddWorker = (areaId: string) => {
+    const worker = unassignedWorkers[0];
+    if (!worker) return;
+    submitCommand("assign_worker_work_area", {
+      worker_id: worker.entity_id,
+      work_area_id: areaId,
+    });
+  };
+
+  const handleRemoveWorker = (areaId: string) => {
+    const worker = workers.find((w) => w.work_area_id === areaId);
+    if (!worker) return;
+    submitCommand("assign_worker_work_area", {
+      worker_id: worker.entity_id,
+      work_area_id: null,
+    });
+  };
 
   const handleDelete = (areaId: string, areaName: string) => {
     if (!confirm(`Delete work area "${areaName}"? Workers assigned to it will be unassigned.`)) return;
@@ -67,9 +95,6 @@ export function WorkAreasPanel() {
 
   const handleSave = () => {
     if (!editName.trim()) return;
-    const mapKey = currentMap
-      ? `${currentMap.dx}:${currentMap.dy}:${currentMap.mx}:${currentMap.my}`
-      : "";
     const id = editingAreaId === "__new__" ? `area_${Date.now()}` : editingAreaId!;
     submitCommand("upsert_work_area", {
       id,
@@ -276,12 +301,30 @@ export function WorkAreasPanel() {
                 <span style={{ fontSize: 12, color: "var(--text-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {area.name}
                 </span>
-                {/* Worker count */}
-                {count > 0 && (
-                  <span style={{ fontSize: 10, color: "var(--text-muted)", background: "rgba(255,255,255,0.08)", borderRadius: 3, padding: "1px 4px" }}>
-                    {count}w
+                {/* Worker +/- controls */}
+                <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                  <button
+                    className="btn btn-sm"
+                    style={{ fontSize: 11, padding: "0 4px", lineHeight: "18px", minHeight: 20, minWidth: 20, opacity: count === 0 ? 0.3 : 1 }}
+                    disabled={count === 0}
+                    onClick={(e) => { e.stopPropagation(); handleRemoveWorker(area.id); }}
+                    title="Unassign one worker"
+                  >
+                    −
+                  </button>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 18, textAlign: "center" }}>
+                    {count}
                   </span>
-                )}
+                  <button
+                    className="btn btn-sm"
+                    style={{ fontSize: 11, padding: "0 4px", lineHeight: "18px", minHeight: 20, minWidth: 20, opacity: unassignedWorkers.length === 0 ? 0.3 : 1 }}
+                    disabled={unassignedWorkers.length === 0}
+                    onClick={(e) => { e.stopPropagation(); handleAddWorker(area.id); }}
+                    title={unassignedWorkers.length === 0 ? "No unassigned workers available" : "Assign one unassigned worker"}
+                  >
+                    +
+                  </button>
+                </div>
                 {/* Edit button */}
                 <button
                   className="btn btn-sm"

@@ -23,6 +23,8 @@ import { ProtectionEndedModal } from "./components/ProtectionEndedModal.js";
 import { BankruptModal } from "./components/BankruptModal.js";
 import { ConnectionLostModal } from "./components/ConnectionLostModal.js";
 import { WorkAreasPanel } from "./components/WorkAreasPanel.js";
+import { MonitoringPanel } from "./components/MonitoringPanel.js";
+import { initMonitoringCollector } from "./state/monitoringCollector.js";
 
 export function App() {
   const setWorld = useGameStore((s) => s.setWorld);
@@ -47,6 +49,7 @@ export function App() {
   const showBuildSheet = useGameStore((s) => s.showBuildSheet);
   const toggleBuildSheet = useGameStore((s) => s.toggleBuildSheet);
   const showWorkAreas = useGameStore((s) => s.showWorkAreas);
+  const showMonitoringPanel = useGameStore((s) => s.showMonitoringPanel);
   const isMobile = useIsMobile();
   const [showSectorWelcome, setShowSectorWelcome] = useState(false);
   const [protectionAckKey, setProtectionAckKey] = useState(0);
@@ -77,6 +80,11 @@ export function App() {
 
   // Connect to map via WS
   useMapSubscription();
+
+  // Initialize monitoring data collector
+  useEffect(() => {
+    initMonitoringCollector();
+  }, []);
 
   // Initialize
   useEffect(() => {
@@ -160,6 +168,7 @@ export function App() {
         {showWorkers && <WorkerListPanel />}
         {showTaxPanel && <TaxPanel />}
         {showWorkAreas && <WorkAreasPanel />}
+        {showMonitoringPanel && <MonitoringPanel />}
         {!player.bankrupt && <TutorialChecklist />}
       </div>
       {isMobile ? (
