@@ -29,6 +29,9 @@ const workerAngles = new Map<string, number>();
 // Per-worker spread offset (pixels), smoothly lerped toward target spread position
 const workerSpreadOffsets = new Map<string, { x: number; y: number }>();
 
+// Reusable offscreen canvas for work-area shape compositing (avoids creating one per frame)
+let areaOffCanvas: HTMLCanvasElement | null = null;
+
 // ── Ambassador sprite ──
 let ambassadorSpriteCanvas: HTMLCanvasElement | null = null;
 const ambassadorAngles = new Map<string, number>();
@@ -500,10 +503,12 @@ export function MapCanvas() {
         const b = parseInt(hex.substring(4, 6), 16);
         const fillAlpha = isSelected ? 0.18 : 0.11;
 
-        // Paint the shape onto an offscreen canvas, then composite onto main.
-        const off = document.createElement("canvas");
-        off.width = w; off.height = h;
+        // Paint the shape onto a reusable offscreen canvas, then composite onto main.
+        if (!areaOffCanvas) areaOffCanvas = document.createElement("canvas");
+        const off = areaOffCanvas;
+        if (off.width !== w || off.height !== h) { off.width = w; off.height = h; }
         const offCtx = off.getContext("2d")!;
+        offCtx.clearRect(0, 0, w, h);
 
         for (const rect of rects) {
           const rx = (rect.x1 - cam.x) * ts;

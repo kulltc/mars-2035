@@ -22,6 +22,25 @@ function findAdminOutpost(store: WorldStore, worker: Worker): string | undefined
 }
 
 /**
+ * Per-tick cache for warehouse capacity keyed by "owner_id:map_key".
+ * Built lazily on first lookup, valid for the duration of one processWorkers() call.
+ */
+let warehouseCapacityCache: Map<string, number> | null = null;
+
+function getWarehouseCapacity(store: WorldStore, ownerId: string, mapKey: string): number {
+  if (!warehouseCapacityCache) {
+    warehouseCapacityCache = new Map();
+    for (const b of store.buildings.values()) {
+      if (b.class === "warehouse" && b.status === "active") {
+        const key = `${b.owner_id}:${b.map_key}`;
+        warehouseCapacityCache.set(key, (warehouseCapacityCache.get(key) ?? 0) + b.capacity);
+      }
+    }
+  }
+  return warehouseCapacityCache.get(`${ownerId}:${mapKey}`) ?? 0;
+}
+
+/**
  * For a warehouse destination, redirect inventory writes to the Admin Outpost and
  * compute pooled capacity (outpost + all active warehouses on same map).
  * For all other buildings, returns the building and its own capacity unchanged.
@@ -39,12 +58,7 @@ function resolveStorageDest(
   if (!outpost) {
     return { inventoryBuilding: dest, effectiveCapacity: dest.capacity };
   }
-  let warehouseCapacity = 0;
-  for (const b of store.buildings.values()) {
-    if (b.class === "warehouse" && b.owner_id === dest.owner_id && b.map_key === dest.map_key && b.status === "active") {
-      warehouseCapacity += b.capacity;
-    }
-  }
+  const warehouseCapacity = getWarehouseCapacity(store, dest.owner_id, dest.map_key);
   return { inventoryBuilding: outpost, effectiveCapacity: outpost.capacity + warehouseCapacity };
 }
 
@@ -61,6 +75,9 @@ function clearWorkerTask(store: WorldStore, worker: Worker, removeFromQueue = tr
 }
 
 export function processWorkers(store: WorldStore) {
+  // Invalidate per-tick warehouse capacity cache
+  warehouseCapacityCache = null;
+
   // ── Task generation ──
   generatePickupTasks(store);
   generateImpliedAdminOutpostTasks(store);
@@ -122,11 +139,12 @@ export function processWorkers(store: WorldStore) {
         const shippable = Math.max(0, available - bufferReserve);
         const amount = Math.min(shippable, workerRemaining);
 
-        // Check destination max_stock
+        // Check destination max_stock (resolve through warehouse pooling if applicable)
         const destForMaxCheck = store.buildings.get(task.to_building_id);
         if (destForMaxCheck) {
-          const maxStock = destForMaxCheck.max_stock?.[res];
-          if (maxStock !== undefined && (destForMaxCheck.inventory[res] ?? 0) >= maxStock) {
+          const { inventoryBuilding: actualDest } = resolveStorageDest(destForMaxCheck, store);
+          const maxStock = actualDest.max_stock?.[res];
+          if (maxStock !== undefined && (actualDest.inventory[res] ?? 0) >= maxStock) {
             clearWorkerTask(store, worker);
             worker.state = "idle";
             break;
