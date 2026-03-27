@@ -216,6 +216,7 @@ export interface Worker {
   current_task_id?: string;
   task_filter?: WorkerFilter;
   work_area_id?: string;
+  return_target_id?: string;
 }
 
 // ── Work Area ──

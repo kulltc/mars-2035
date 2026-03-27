@@ -333,8 +333,8 @@ export function BuildingDetail() {
         );
       })()}
 
-      {/* Routes — not applicable for warehouses (they are delivery targets, not sources) */}
-      {building.class !== "warehouse" && <div className="bd-section">
+      {/* Routes */}
+      <div className="bd-section">
         <div className="bd-section-title">Routes</div>
         {effectiveRoutes.length === 0 ? (
           <div className="route-hint">Drag from this building to another to create a route</div>
@@ -360,7 +360,7 @@ export function BuildingDetail() {
             );
           })
         )}
-      </div>}
+      </div>
 
       {/* Quantum relay rules */}
       {building.class === "quantum_relay" && (

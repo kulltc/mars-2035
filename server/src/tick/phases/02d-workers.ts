@@ -21,6 +21,27 @@ function findAdminOutpost(store: WorldStore, worker: Worker): string | undefined
   return account?.admin_outpost_building_id;
 }
 
+/** Find the nearest active warehouse or admin outpost for this worker. */
+function findNearestStorage(store: WorldStore, worker: Worker): string | undefined {
+  const outpostId = findAdminOutpost(store, worker);
+  if (!outpostId) return undefined;
+
+  let nearestId = outpostId;
+  let nearestDist = Infinity;
+  for (const b of store.buildings.values()) {
+    if (b.owner_id !== worker.owner_id) continue;
+    if (b.map_key !== worker.map_key) continue;
+    if (b.status !== "active") continue;
+    if (b.class !== "admin_outpost" && b.class !== "warehouse") continue;
+    const dist = Math.hypot(b.location.x - worker.x, b.location.y - worker.y);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestId = b.entity_id;
+    }
+  }
+  return nearestId;
+}
+
 /**
  * Per-tick cache for warehouse capacity keyed by "owner_id:map_key".
  * Built lazily on first lookup, valid for the duration of one processWorkers() call.
@@ -88,11 +109,12 @@ export function processWorkers(store: WorldStore) {
     if (worker.state !== "idle") continue;
     if (worker.worker_status === "inactive") continue;
 
-    // If worker has cargo (including money), send it home first
+    // If worker has cargo (including money), send it to nearest storage
     if (totalInventory(worker.inventory) > 0 || (worker.inventory.money ?? 0) > 0) {
-      const outpostId = findAdminOutpost(store, worker);
-      const outpost = outpostId ? store.buildings.get(outpostId) : undefined;
-      if (outpost) {
+      const storageId = findNearestStorage(store, worker);
+      const storage = storageId ? store.buildings.get(storageId) : undefined;
+      if (storage) {
+        worker.return_target_id = storageId;
         worker.state = "returning_to_base";
         continue;
       }
@@ -126,10 +148,13 @@ export function processWorkers(store: WorldStore) {
         const src = store.buildings.get(task.from_building_id);
         if (!src) { resetWorker(store, worker); break; }
 
+        // For warehouses, actual inventory lives on the admin outpost (pooled storage)
+        const { inventoryBuilding: srcInv } = resolveStorageDest(src, store);
+
         const res = task.resource;
         // Check output_buffer first, then inventory
-        const bufferAvailable = src.output_buffer?.[res] ?? 0;
-        const invAvailable = src.inventory[res] ?? 0;
+        const bufferAvailable = srcInv.output_buffer?.[res] ?? 0;
+        const invAvailable = srcInv.inventory[res] ?? 0;
         const available = bufferAvailable + invAvailable;
         const workerRemaining = res === "money"
           ? Math.max(0, WORKER_MONEY_CAPACITY - (worker.inventory.money ?? 0))
@@ -159,15 +184,15 @@ export function processWorkers(store: WorldStore) {
         }
 
         if (amount > 0) {
-          // Deduct from output_buffer first, then inventory
+          // Deduct from the resolved inventory building (admin outpost for warehouses)
           let remaining = amount;
           if (bufferAvailable > 0 && remaining > 0) {
             const fromBuffer = Math.min(bufferAvailable, remaining);
-            src.output_buffer![res] = bufferAvailable - fromBuffer;
+            srcInv.output_buffer![res] = bufferAvailable - fromBuffer;
             remaining -= fromBuffer;
           }
           if (remaining > 0) {
-            src.inventory[res] = invAvailable - remaining;
+            srcInv.inventory[res] = invAvailable - remaining;
           }
           worker.inventory[res] = (worker.inventory[res] ?? 0) + amount;
           store.pushEvent("worker_pickup", {
@@ -302,38 +327,41 @@ export function processWorkers(store: WorldStore) {
       }
 
       case "returning_to_base": {
-        const outpostId = findAdminOutpost(store, worker);
-        const outpost = outpostId ? store.buildings.get(outpostId) : undefined;
-        if (!outpost) { worker.state = "idle"; break; }
+        const targetId = worker.return_target_id ?? findAdminOutpost(store, worker);
+        const target = targetId ? store.buildings.get(targetId) : undefined;
+        if (!target) { worker.state = "idle"; worker.return_target_id = undefined; break; }
 
-        if (moveToward(worker, outpost.location.x, outpost.location.y)) {
+        if (moveToward(worker, target.location.x, target.location.y)) {
           worker.state = "unloading";
         }
         break;
       }
 
       case "unloading": {
-        const outpostId = findAdminOutpost(store, worker);
-        const outpost = outpostId ? store.buildings.get(outpostId) : undefined;
-        if (!outpost) { worker.state = "idle"; break; }
+        const targetId = worker.return_target_id ?? findAdminOutpost(store, worker);
+        const target = targetId ? store.buildings.get(targetId) : undefined;
+        if (!target) { worker.state = "idle"; worker.return_target_id = undefined; break; }
 
-        // Dump inventory into admin outpost; money always accepted,
+        // Resolve through warehouse pooling so inventory is written to the right place
+        const { inventoryBuilding: actualDest, effectiveCapacity } = resolveStorageDest(target, store);
+
+        // Dump inventory; money always accepted,
         // materials capped by remaining capacity (excess is destroyed)
         let totalDumped = 0;
         let moneyDumped = 0;
-        let remaining = remainingCapacity(outpost.inventory, outpost.capacity);
+        let remaining = remainingCapacity(actualDest.inventory, effectiveCapacity);
         for (const key of Object.keys(worker.inventory) as MaterialType[]) {
           const amount = worker.inventory[key] ?? 0;
           if (amount <= 0) continue;
           worker.inventory[key] = 0;
           if (key === "money") {
-            outpost.inventory[key] = (outpost.inventory[key] ?? 0) + amount;
+            actualDest.inventory[key] = (actualDest.inventory[key] ?? 0) + amount;
             moneyDumped += amount;
             totalDumped += amount;
           } else {
             const accepted = Math.min(amount, remaining);
             if (accepted > 0) {
-              outpost.inventory[key] = (outpost.inventory[key] ?? 0) + accepted;
+              actualDest.inventory[key] = (actualDest.inventory[key] ?? 0) + accepted;
               remaining -= accepted;
               totalDumped += accepted;
             }
@@ -351,12 +379,13 @@ export function processWorkers(store: WorldStore) {
         if (totalDumped > 0) {
           store.pushEvent("worker_dropoff", {
             worker_id: worker.entity_id,
-            building_id: outpost.entity_id,
+            building_id: target.entity_id,
             resource: "mixed",
             amount: totalDumped,
           }, worker.map_key);
         }
 
+        worker.return_target_id = undefined;
         worker.state = "idle";
         break;
       }
@@ -371,12 +400,15 @@ function generatePickupTasks(store: WorldStore) {
     if (building.status === "constructing") continue;
     if (!building.outgoing_routes) continue;
 
+    // For warehouses, the actual inventory lives on the admin outpost (pooled storage)
+    const { inventoryBuilding: srcInv } = resolveStorageDest(building, store);
+
     for (const route of building.outgoing_routes) {
       // Expand "all" routes into per-resource tasks
       const resources: MaterialType[] = route.resource === "all"
         ? MATERIAL_TYPES.filter((m) => {
             if (m === "money") return false;
-            const available = (building.output_buffer?.[m] ?? 0) + (building.inventory[m] ?? 0);
+            const available = (srcInv.output_buffer?.[m] ?? 0) + (srcInv.inventory[m] ?? 0);
             const buffer = building.buffer_stock?.[m] ?? 0;
             return available - buffer > 0;
           })
@@ -384,7 +416,7 @@ function generatePickupTasks(store: WorldStore) {
 
       for (const res of resources) {
         // Skip if building has no shippable stock (respecting buffer_stock)
-        const available = (building.output_buffer?.[res] ?? 0) + (building.inventory[res] ?? 0);
+        const available = (srcInv.output_buffer?.[res] ?? 0) + (srcInv.inventory[res] ?? 0);
         const buffer = building.buffer_stock?.[res] ?? 0;
         if (available - buffer <= 0) continue;
 
