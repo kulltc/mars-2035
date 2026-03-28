@@ -721,32 +721,24 @@ function createServer(): McpServer {
     research: () => RESEARCH_TREE,
 
     materials: () => {
-      const chains: Record<string, Array<{ building: string; inputs: Record<string, number>; output: string; output_amount: number }>> = {
-        raw: RESOURCE_TYPES.map((r) => ({ building: "mine", inputs: {}, output: r, output_amount: 2 })),
-        morphic: [], toroidin: [], cryogenic: [], psychophysical: [],
-      };
-      const chainMap: Record<string, string> = {
-        smelter: "morphic", magnetic_press: "morphic", morphic_forge: "morphic",
-        servo_assembly: "morphic", replication_chamber: "morphic",
-        polymer_kiln: "toroidin", crystal_grower: "toroidin", toroidin_foundry: "toroidin",
-        muphrid_lab: "toroidin", solar_loom: "toroidin",
-        cryo_distillery: "cryogenic", phase_condenser: "cryogenic", xenotherm_reactor: "cryogenic",
-        deep_freeze_synth: "cryogenic", iceworld_refinery: "cryogenic",
-        resonance_tuner: "psychophysical", neural_loom: "psychophysical",
-        psychophysical_amp: "psychophysical", dampening_forge: "psychophysical",
-        consciousness_engine: "psychophysical",
-      };
-      for (const [cls, def] of Object.entries(BUILDING_DEFS)) {
-        if (def.recipe && chainMap[cls]) {
-          chains[chainMap[cls]].push({
+      // Derive processing chains from recipes — no hardcoded building lists
+      const recipes = BUILDING_CLASSES
+        .filter((cls) => BUILDING_DEFS[cls].recipe)
+        .map((cls) => {
+          const r = BUILDING_DEFS[cls].recipe!;
+          return {
             building: cls,
-            inputs: def.recipe.inputs as Record<string, number>,
-            output: def.recipe.output,
-            output_amount: def.recipe.output_amount,
-          });
-        }
-      }
-      return { all_materials: MATERIAL_TYPES, raw_resources: RESOURCE_TYPES, processing_chains: chains };
+            inputs: r.inputs as Record<string, number>,
+            output: r.output,
+            output_amount: r.output_amount,
+          };
+        });
+
+      return {
+        all_materials: MATERIAL_TYPES,
+        raw_resources: RESOURCE_TYPES,
+        recipes,
+      };
     },
 
     market: () => ({
@@ -789,154 +781,28 @@ function createServer(): McpServer {
   // ── MCP Resources (static game specs — kept for clients that support resources) ──
   // ══════════════════════════════════════════════════════
 
-  // ── Building Specs ──
+  // Resources reuse specBuilders — kept for clients that support MCP resources
 
-  mcp.resource(
-    "building_specs",
-    "mars2035://specs/buildings",
-    { description: "All 32 building definitions: costs, capacity, upkeep, recipes, build times" },
-    async () => ({
-      contents: [{
-        uri: "mars2035://specs/buildings",
-        mimeType: "application/json",
-        text: JSON.stringify(
-          Object.fromEntries(
-            BUILDING_CLASSES.map((cls) => [cls, { class: cls, ...BUILDING_DEFS[cls] }])
-          ),
-          null, 2
-        ),
-      }],
-    })
-  );
-
-  // ── Research Tree ──
-
-  mcp.resource(
-    "research_tree",
-    "mars2035://specs/research",
-    { description: "All 13 research options: costs, prerequisites, effects, unlocks" },
-    async () => ({
-      contents: [{
-        uri: "mars2035://specs/research",
-        mimeType: "application/json",
-        text: JSON.stringify(RESEARCH_TREE, null, 2),
-      }],
-    })
-  );
-
-  // ── Materials & Processing Chains ──
-
-  mcp.resource(
-    "materials",
-    "mars2035://specs/materials",
-    { description: "All 34 material types organized by processing chain with production dependency graph" },
-    async () => {
-      // Build processing chain info from BUILDING_DEFS recipes
-      const chains: Record<string, Array<{ building: string; inputs: Record<string, number>; output: string; output_amount: number }>> = {
-        raw: RESOURCE_TYPES.map((r) => ({ building: "mine", inputs: {}, output: r, output_amount: 2 })),
-        morphic: [],
-        toroidin: [],
-        cryogenic: [],
-        psychophysical: [],
-      };
-
-      const chainMap: Record<string, string> = {
-        smelter: "morphic", magnetic_press: "morphic", morphic_forge: "morphic",
-        servo_assembly: "morphic", replication_chamber: "morphic",
-        polymer_kiln: "toroidin", crystal_grower: "toroidin", toroidin_foundry: "toroidin",
-        muphrid_lab: "toroidin", solar_loom: "toroidin",
-        cryo_distillery: "cryogenic", phase_condenser: "cryogenic", xenotherm_reactor: "cryogenic",
-        deep_freeze_synth: "cryogenic", iceworld_refinery: "cryogenic",
-        resonance_tuner: "psychophysical", neural_loom: "psychophysical",
-        psychophysical_amp: "psychophysical", dampening_forge: "psychophysical",
-        consciousness_engine: "psychophysical",
-      };
-
-      for (const [cls, def] of Object.entries(BUILDING_DEFS)) {
-        if (def.recipe && chainMap[cls]) {
-          chains[chainMap[cls]].push({
-            building: cls,
-            inputs: def.recipe.inputs as Record<string, number>,
-            output: def.recipe.output,
-            output_amount: def.recipe.output_amount,
-          });
-        }
-      }
-
-      return {
+  for (const [key, label] of [
+    ["buildings", "All building definitions: costs, capacity, upkeep, recipes, build times"],
+    ["research", "All research options: costs, prerequisites, effects, unlocks"],
+    ["materials", "All material types with processing recipes derived from building defs"],
+    ["market", "Base market prices, import multiplier, volatility, supply pressure"],
+    ["rules", "Territory, tax, worker, ambassador, and expansion rules"],
+  ] as const) {
+    mcp.resource(
+      key,
+      `mars2035://specs/${key}`,
+      { description: label },
+      async () => ({
         contents: [{
-          uri: "mars2035://specs/materials",
+          uri: `mars2035://specs/${key}`,
           mimeType: "application/json",
-          text: JSON.stringify({
-            all_materials: MATERIAL_TYPES,
-            raw_resources: RESOURCE_TYPES,
-            processing_chains: chains,
-          }, null, 2),
+          text: JSON.stringify(specBuilders[key](), null, 2),
         }],
-      };
-    }
-  );
-
-  // ── Market Config ──
-
-  mcp.resource(
-    "market_config",
-    "mars2035://specs/market",
-    { description: "Base market prices, import multiplier, volatility, supply pressure" },
-    async () => ({
-      contents: [{
-        uri: "mars2035://specs/market",
-        mimeType: "application/json",
-        text: JSON.stringify({
-          base_prices: BASE_MARKET_PRICES,
-          import_multiplier: IMPORT_PRICE_MULTIPLIER,
-          volatility: MARKET_VOLATILITY,
-          price_range: { min: MARKET_PRICE_MIN, max: MARKET_PRICE_MAX },
-          supply_pressure: { factor: SUPPLY_PRESSURE_FACTOR, decay: SUPPLY_PRESSURE_DECAY },
-        }, null, 2),
-      }],
-    })
-  );
-
-  // ── Game Rules ──
-
-  mcp.resource(
-    "game_rules",
-    "mars2035://specs/rules",
-    { description: "Territory, tax, worker, ambassador, and expansion rules" },
-    async () => ({
-      contents: [{
-        uri: "mars2035://specs/rules",
-        mimeType: "application/json",
-        text: JSON.stringify({
-          territory: {
-            buildings: TERRITORY_BUILDINGS,
-            radius: TERRITORY_RADIUS,
-            tax_per_building: TAX_PER_BUILDING,
-          },
-          workers: {
-            capacity: WORKER_CAPACITY,
-            money_capacity: WORKER_MONEY_CAPACITY,
-            upkeep_per_tick: WORKER_UPKEEP,
-            cost: WORKER_COST,
-            starting_workers: STARTING_WORKERS,
-          },
-          ambassadors: {
-            cooldown_ticks: AMBASSADOR_COOLDOWN_TICKS,
-            max_percent_by_tier: AMBASSADOR_MAX_PERCENT_BY_TIER,
-          },
-          map: {
-            tiles_per_map: TILES_PER_MAP,
-            resource_density: RESOURCE_DENSITY,
-            expansion_cost: MAP_EXPANSION_COST,
-            starting_money: STARTING_MONEY,
-            new_player_protection_ticks: NEW_PLAYER_PROTECTION_TICKS,
-          },
-          tier3_resources: TIER3_RESOURCES,
-        }, null, 2),
-      }],
-    })
-  );
+      })
+    );
+  }
 
   return mcp;
 }
