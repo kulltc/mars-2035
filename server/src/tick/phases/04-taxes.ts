@@ -31,6 +31,8 @@ export function processTaxes(store: WorldStore) {
   expireNewPlayerProtection(store);
 
   // Wealth tax: charge money stored in buildings at 1/100th the sales tax rate.
+  // Accumulate totals per player per map for a single event each.
+  const taxPaidTotals = new Map<string, number>(); // key: "playerId:mapKey"
   for (const building of store.buildings.values()) {
     if (store.isNewPlayerProtectionActive(building.owner_id, building.map_key)) continue;
 
@@ -48,6 +50,17 @@ export function processTaxes(store: WorldStore) {
 
     building.inventory.money = round2(money - taxAmount);
     store.taxPool.set(building.map_key, round2((store.taxPool.get(building.map_key) ?? 0) + taxAmount));
+
+    const key = `${building.owner_id}:${building.map_key}`;
+    taxPaidTotals.set(key, round2((taxPaidTotals.get(key) ?? 0) + taxAmount));
+  }
+
+  // Emit one tax_paid event per player per map
+  for (const [key, amount] of taxPaidTotals) {
+    const sep = key.indexOf(":");
+    const playerId = key.slice(0, sep);
+    const mapKey = key.slice(sep + 1);
+    store.pushEvent("tax_paid", { player_id: playerId, amount, map_key: mapKey }, mapKey);
   }
 
   for (const [mapKey, pool] of store.taxPool) {

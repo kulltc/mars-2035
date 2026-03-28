@@ -308,13 +308,13 @@ function FinancialTab({ windowSize }: { windowSize: WindowSize }) {
     return <div className="monitoring-empty">Collecting data... wait for ticks to arrive.</div>;
   }
 
-  const totalIncome = data.totalSalesRevenue + data.totalTaxIncome;
-  const totalExpenses = data.totalUpkeep + data.totalImportCosts + data.totalConstructionCosts;
+  const totalIncome = data.totalSalesRevenue + data.totalTaxIncome + data.totalAmbassadorIncome;
+  const totalExpenses = data.totalUpkeep + data.totalImportCosts + data.totalConstructionCosts + data.totalTaxPaid + data.totalAmbassadorExpense;
   const net = totalIncome - totalExpenses;
 
   // Sparkline for net P&L per tick
   const plSparkData = snapshots.map(
-    (s) => (s.salesRevenue + s.taxCollected) - (s.upkeepCharged + s.importCosts + s.constructionSpend)
+    (s) => (s.salesRevenue + s.taxCollected + s.ambassadorIncome) - (s.upkeepCharged + s.importCosts + s.constructionSpend + s.taxPaid + s.ambassadorExpense)
   );
 
   return (
@@ -351,6 +351,14 @@ function FinancialTab({ windowSize }: { windowSize: WindowSize }) {
           perTick={data.totalTaxIncome / data.ticksCaptured}
           color="var(--success)"
         />
+        {data.totalAmbassadorIncome > 0 && (
+          <FinancialRow
+            label="Ambassador Income"
+            total={data.totalAmbassadorIncome}
+            perTick={data.totalAmbassadorIncome / data.ticksCaptured}
+            color="var(--success)"
+          />
+        )}
         <div className="monitoring-fin-total">
           <span>Total Income</span>
           <span className="mono" style={{ color: "var(--success)" }}>{formatMoney(totalIncome)}</span>
@@ -384,6 +392,22 @@ function FinancialTab({ windowSize }: { windowSize: WindowSize }) {
           perTick={data.totalConstructionCosts / data.ticksCaptured}
           color="var(--text-muted)"
         />
+        {data.totalTaxPaid > 0 && (
+          <FinancialRow
+            label="Wealth Tax"
+            total={data.totalTaxPaid}
+            perTick={data.totalTaxPaid / data.ticksCaptured}
+            color="var(--danger)"
+          />
+        )}
+        {data.totalAmbassadorExpense > 0 && (
+          <FinancialRow
+            label="Ambassador Losses"
+            total={data.totalAmbassadorExpense}
+            perTick={data.totalAmbassadorExpense / data.ticksCaptured}
+            color="var(--danger)"
+          />
+        )}
         <div className="monitoring-fin-total">
           <span>Total Expenses</span>
           <span className="mono" style={{ color: "var(--danger)" }}>{formatMoney(totalExpenses)}</span>

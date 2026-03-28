@@ -33,6 +33,9 @@ export interface TickAccumulator {
   salesByResource: Partial<Record<ResourceType, number>>;
   importCosts: number;
   taxCollected: number;
+  taxPaid: number;
+  ambassadorIncome: number;
+  ambassadorExpense: number;
   constructionSpend: number;
 }
 
@@ -56,6 +59,9 @@ export interface MonitoringAggregates {
   totalSalesRevenue: number;
   totalImportCosts: number;
   totalTaxIncome: number;
+  totalTaxPaid: number;
+  totalAmbassadorIncome: number;
+  totalAmbassadorExpense: number;
   totalConstructionCosts: number;
   netProfitLoss: number;
   avgIncomePerTick: number;
@@ -84,6 +90,9 @@ function createEmptyAccumulator(tick: number): TickAccumulator {
     salesByResource: {},
     importCosts: 0,
     taxCollected: 0,
+    taxPaid: 0,
+    ambassadorIncome: 0,
+    ambassadorExpense: 0,
     constructionSpend: 0,
   };
 }
@@ -167,6 +176,25 @@ function processEvent(
       acc.taxCollected += (evt.data.amount as number) ?? 0;
       break;
     }
+    case "tax_paid": {
+      if (evt.data.player_id !== playerId) return;
+      acc.taxPaid += (evt.data.amount as number) ?? 0;
+      break;
+    }
+    case "ambassador_arrived": {
+      const ownerId = evt.data.owner_id as string;
+      const carriedMoney = (evt.data.carried_money as number) ?? 0;
+      if (ownerId === playerId && carriedMoney > 0) {
+        // We sent an ambassador and it collected money
+        acc.ambassadorIncome += carriedMoney;
+      }
+      const targetOwnerId = evt.data.target_owner_id as string | undefined;
+      if (targetOwnerId === playerId && carriedMoney > 0) {
+        // A rival ambassador took money from our building
+        acc.ambassadorExpense += carriedMoney;
+      }
+      break;
+    }
     case "building_placed": {
       if (evt.data.owner_id !== playerId) return;
       const buildingClass = evt.data.building_class as BuildingClass;
@@ -233,6 +261,9 @@ export function computeMonitoringAggregates(
   let totalSalesRevenue = 0;
   let totalImportCosts = 0;
   let totalTaxIncome = 0;
+  let totalTaxPaid = 0;
+  let totalAmbassadorIncome = 0;
+  let totalAmbassadorExpense = 0;
   let totalConstructionCosts = 0;
 
   for (const acc of accumulators) {
@@ -249,6 +280,9 @@ export function computeMonitoringAggregates(
     totalSalesRevenue += acc.salesRevenue;
     totalImportCosts += acc.importCosts;
     totalTaxIncome += acc.taxCollected;
+    totalTaxPaid += acc.taxPaid;
+    totalAmbassadorIncome += acc.ambassadorIncome;
+    totalAmbassadorExpense += acc.ambassadorExpense;
     totalConstructionCosts += acc.constructionSpend;
   }
 
@@ -341,8 +375,8 @@ export function computeMonitoringAggregates(
   }
 
   // Financial
-  const totalIncome = totalSalesRevenue + totalTaxIncome;
-  const totalExpenses = totalUpkeep + totalImportCosts + totalConstructionCosts;
+  const totalIncome = totalSalesRevenue + totalTaxIncome + totalAmbassadorIncome;
+  const totalExpenses = totalUpkeep + totalImportCosts + totalConstructionCosts + totalTaxPaid + totalAmbassadorExpense;
 
   return {
     windowSize,
@@ -358,6 +392,9 @@ export function computeMonitoringAggregates(
     totalSalesRevenue,
     totalImportCosts,
     totalTaxIncome,
+    totalTaxPaid,
+    totalAmbassadorIncome,
+    totalAmbassadorExpense,
     totalConstructionCosts,
     netProfitLoss: totalIncome - totalExpenses,
     avgIncomePerTick: totalIncome / ticksCaptured,
@@ -381,6 +418,9 @@ function emptyAggregates(windowSize: number): MonitoringAggregates {
     totalSalesRevenue: 0,
     totalImportCosts: 0,
     totalTaxIncome: 0,
+    totalTaxPaid: 0,
+    totalAmbassadorIncome: 0,
+    totalAmbassadorExpense: 0,
     totalConstructionCosts: 0,
     netProfitLoss: 0,
     avgIncomePerTick: 0,

@@ -297,6 +297,7 @@ export type EventType =
   | "processing"
   | "research_complete"
   | "tax_collected"
+  | "tax_paid"
   | "new_player_protection_ended"
   | "ambassador_dispatched"
   | "ambassador_arrived"

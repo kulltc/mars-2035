@@ -957,11 +957,16 @@ function handleUpsertWorkArea(_store: WorldStore, player: Player, data: Record<s
     color: string;
   };
 
+  if (!id || !name || !map_key || !rects || !color) {
+    return { ok: false, error: "Missing required fields: id, name, map_key, rects, color" };
+  }
+
   if (!player.work_areas) player.work_areas = [];
 
   const existing = player.work_areas.find((a) => a.id === id);
   if (existing) {
     existing.name = name;
+    existing.map_key = map_key;
     existing.rects = rects;
     existing.color = color;
     // Sync all workers assigned to this area

@@ -5,7 +5,7 @@ import { filterStateForPlayer } from "./filterState.js";
 
 const TERRITORY_SET = new Set<string>(TERRITORY_BUILDINGS);
 
-function computeTaxInfo(store: WorldStore, mapKey: MapKey): TaxInfo {
+export function computeTaxInfo(store: WorldStore, mapKey: MapKey): TaxInfo {
   const playerCounts = new Map<string, number>();
   let total = 0;
   for (const b of store.buildings.values()) {

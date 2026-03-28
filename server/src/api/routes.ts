@@ -2,12 +2,14 @@ import type { FastifyInstance } from "fastify";
 import {
   type Command,
   type CommandType,
+  type MapKey,
   BUILDING_CLASSES,
   MATERIAL_TYPES,
   toMapKey,
 } from "@mars-2035/shared";
 import type { WorldStore } from "../store/WorldStore.js";
 import { filterStateForPlayer } from "./filterState.js";
+import { computeTaxInfo } from "./ws.js";
 import { pool, getResourceTilesForMap } from "../db.js";
 
 const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
@@ -134,6 +136,93 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
     }
   );
 
+  // GET /api/market (public — current market prices)
+  app.get("/api/market", async () => {
+    return store.marketPrices;
+  });
+
+  // GET /api/map/:dx/:dy/:mx/:my/snapshot (authenticated — dynamic state for a map)
+  app.get<{ Params: { dx: string; dy: string; mx: string; my: string } }>(
+    "/api/map/:dx/:dy/:mx/:my/snapshot",
+    async (req, reply) => {
+      try {
+        await req.jwtVerify();
+      } catch {
+        reply.code(401);
+        return { error: "Unauthorized" };
+      }
+
+      const { playerId } = req.user as { userId: string; playerId: string };
+      const { dx, dy, mx, my } = req.params;
+      const mapKey = toMapKey(Number(dx), Number(dy), Number(mx), Number(my));
+
+      const { buildings, workers, ambassadors } = filterStateForPlayer(
+        playerId,
+        store.getBuildingsByMap(mapKey),
+        store.getWorkersByMap(mapKey),
+        store.getAmbassadorsByMap(mapKey),
+      );
+
+      const player = store.players.get(playerId);
+      const workAreas = (player?.work_areas ?? []).filter((a) => a.map_key === mapKey);
+
+      return {
+        map_key: mapKey,
+        tick: store.tick,
+        buildings,
+        workers,
+        ambassadors,
+        market_prices: store.marketPrices,
+        tax_info: computeTaxInfo(store, mapKey),
+        work_areas: workAreas,
+      };
+    }
+  );
+
+  // GET /api/player/:id/workers (authenticated — all workers for player)
+  app.get<{ Params: { id: string } }>("/api/player/:id/workers", async (req, reply) => {
+    try {
+      await req.jwtVerify();
+    } catch {
+      reply.code(401);
+      return { error: "Unauthorized" };
+    }
+
+    const { playerId } = req.user as { userId: string; playerId: string };
+    if (req.params.id !== playerId) {
+      reply.code(403);
+      return { error: "Forbidden" };
+    }
+
+    const result = [];
+    for (const w of store.workers.values()) {
+      if (w.owner_id === playerId) result.push(w);
+    }
+    return result;
+  });
+
+  // GET /api/player/:id/ambassadors (authenticated — all ambassadors for player)
+  app.get<{ Params: { id: string } }>("/api/player/:id/ambassadors", async (req, reply) => {
+    try {
+      await req.jwtVerify();
+    } catch {
+      reply.code(401);
+      return { error: "Unauthorized" };
+    }
+
+    const { playerId } = req.user as { userId: string; playerId: string };
+    if (req.params.id !== playerId) {
+      reply.code(403);
+      return { error: "Forbidden" };
+    }
+
+    const result = [];
+    for (const a of store.ambassadors.values()) {
+      if (a.owner_id === playerId) result.push(a);
+    }
+    return result;
+  });
+
   // GET /api/events
   app.get<{ Querystring: { map_key?: string; since_seq?: string } }>(
     "/api/events",
@@ -142,6 +231,10 @@ export function registerRoutes(app: FastifyInstance, store: WorldStore) {
       if (map_key) {
         const sinceSeq = since_seq ? Number(since_seq) : 0;
         return store.getEventsSince(map_key, sinceSeq);
+      }
+      if (since_seq) {
+        const sinceSeq = Number(since_seq);
+        return store.events.filter((e) => e.seq > sinceSeq);
       }
       return store.events.slice(-100);
     }

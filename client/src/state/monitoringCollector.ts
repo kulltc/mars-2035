@@ -29,6 +29,9 @@ export interface TickSnapshot {
   salesByResource: Partial<Record<ResourceType, number>>;
   importCosts: number;
   taxCollected: number;
+  taxPaid: number;
+  ambassadorIncome: number;
+  ambassadorExpense: number;
   constructionSpend: number;
   workerCount: WorkerSnapshot;
   buildingSnapshot: BuildingSnapshotEntry[];
@@ -61,6 +64,9 @@ export interface MonitoringAggregates {
   totalSalesRevenue: number;
   totalImportCosts: number;
   totalTaxIncome: number;
+  totalTaxPaid: number;
+  totalAmbassadorIncome: number;
+  totalAmbassadorExpense: number;
   totalConstructionCosts: number;
   netProfitLoss: number;
   avgIncomePerTick: number;
@@ -98,6 +104,9 @@ function createEmptyAccumulator() {
     salesByResource: {} as Partial<Record<ResourceType, number>>,
     importCosts: 0,
     taxCollected: 0,
+    taxPaid: 0,
+    ambassadorIncome: 0,
+    ambassadorExpense: 0,
     constructionSpend: 0,
   };
 }
@@ -176,6 +185,23 @@ function processEvent(evt: GameEvent, playerId: string) {
     case "tax_collected": {
       if (evt.data.player_id !== playerId) return;
       accumulator.taxCollected += (evt.data.amount as number) ?? 0;
+      break;
+    }
+    case "tax_paid": {
+      if (evt.data.player_id !== playerId) return;
+      accumulator.taxPaid += (evt.data.amount as number) ?? 0;
+      break;
+    }
+    case "ambassador_arrived": {
+      const ownerId = evt.data.owner_id as string;
+      const carriedMoney = (evt.data.carried_money as number) ?? 0;
+      if (ownerId === playerId && carriedMoney > 0) {
+        accumulator.ambassadorIncome += carriedMoney;
+      }
+      const targetOwnerId = evt.data.target_owner_id as string | undefined;
+      if (targetOwnerId === playerId && carriedMoney > 0) {
+        accumulator.ambassadorExpense += carriedMoney;
+      }
       break;
     }
     case "building_placed": {
@@ -338,6 +364,9 @@ export function getMonitoringAggregates(windowSize: 10 | 50 | 100): MonitoringAg
   let totalSalesRevenue = 0;
   let totalImportCosts = 0;
   let totalTaxIncome = 0;
+  let totalTaxPaid = 0;
+  let totalAmbassadorIncome = 0;
+  let totalAmbassadorExpense = 0;
   let totalConstructionCosts = 0;
   let totalWorkers = 0;
   let totalActiveWorkers = 0;
@@ -357,6 +386,9 @@ export function getMonitoringAggregates(windowSize: 10 | 50 | 100): MonitoringAg
     totalSalesRevenue += snap.salesRevenue;
     totalImportCosts += snap.importCosts;
     totalTaxIncome += snap.taxCollected;
+    totalTaxPaid += snap.taxPaid;
+    totalAmbassadorIncome += snap.ambassadorIncome;
+    totalAmbassadorExpense += snap.ambassadorExpense;
     totalConstructionCosts += snap.constructionSpend;
     totalWorkers += snap.workerCount.total;
     totalActiveWorkers += snap.workerCount.active;
@@ -469,8 +501,8 @@ export function getMonitoringAggregates(windowSize: 10 | 50 | 100): MonitoringAg
   const avgUpkeepPerTick = totalUpkeep / ticksCaptured;
   const workerUpkeepEst = Math.max(0, avgUpkeepPerTick - buildingUpkeepEst);
 
-  const totalIncome = totalSalesRevenue + totalTaxIncome;
-  const totalExpenses = totalUpkeep + totalImportCosts + totalConstructionCosts;
+  const totalIncome = totalSalesRevenue + totalTaxIncome + totalAmbassadorIncome;
+  const totalExpenses = totalUpkeep + totalImportCosts + totalConstructionCosts + totalTaxPaid + totalAmbassadorExpense;
 
   return {
     windowSize,
@@ -491,6 +523,9 @@ export function getMonitoringAggregates(windowSize: 10 | 50 | 100): MonitoringAg
     totalSalesRevenue,
     totalImportCosts,
     totalTaxIncome,
+    totalTaxPaid,
+    totalAmbassadorIncome,
+    totalAmbassadorExpense,
     totalConstructionCosts,
     netProfitLoss: totalIncome - totalExpenses,
     avgIncomePerTick: totalIncome / ticksCaptured,
@@ -524,6 +559,9 @@ function emptyAggregates(windowSize: number): MonitoringAggregates {
     totalSalesRevenue: 0,
     totalImportCosts: 0,
     totalTaxIncome: 0,
+    totalTaxPaid: 0,
+    totalAmbassadorIncome: 0,
+    totalAmbassadorExpense: 0,
     totalConstructionCosts: 0,
     netProfitLoss: 0,
     avgIncomePerTick: 0,
