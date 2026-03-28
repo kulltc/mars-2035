@@ -709,7 +709,84 @@ function createServer(): McpServer {
   );
 
   // ══════════════════════════════════════════════════════
-  // ── MCP Resources (static game specs) ──
+  // ── get_specs tool (game specs accessible to AI) ──
+  // ══════════════════════════════════════════════════════
+
+  const specBuilders: Record<string, () => unknown> = {
+    buildings: () =>
+      Object.fromEntries(
+        BUILDING_CLASSES.map((cls) => [cls, { class: cls, ...BUILDING_DEFS[cls] }])
+      ),
+
+    research: () => RESEARCH_TREE,
+
+    materials: () => {
+      const chains: Record<string, Array<{ building: string; inputs: Record<string, number>; output: string; output_amount: number }>> = {
+        raw: RESOURCE_TYPES.map((r) => ({ building: "mine", inputs: {}, output: r, output_amount: 2 })),
+        morphic: [], toroidin: [], cryogenic: [], psychophysical: [],
+      };
+      const chainMap: Record<string, string> = {
+        smelter: "morphic", magnetic_press: "morphic", morphic_forge: "morphic",
+        servo_assembly: "morphic", replication_chamber: "morphic",
+        polymer_kiln: "toroidin", crystal_grower: "toroidin", toroidin_foundry: "toroidin",
+        muphrid_lab: "toroidin", solar_loom: "toroidin",
+        cryo_distillery: "cryogenic", phase_condenser: "cryogenic", xenotherm_reactor: "cryogenic",
+        deep_freeze_synth: "cryogenic", iceworld_refinery: "cryogenic",
+        resonance_tuner: "psychophysical", neural_loom: "psychophysical",
+        psychophysical_amp: "psychophysical", dampening_forge: "psychophysical",
+        consciousness_engine: "psychophysical",
+      };
+      for (const [cls, def] of Object.entries(BUILDING_DEFS)) {
+        if (def.recipe && chainMap[cls]) {
+          chains[chainMap[cls]].push({
+            building: cls,
+            inputs: def.recipe.inputs as Record<string, number>,
+            output: def.recipe.output,
+            output_amount: def.recipe.output_amount,
+          });
+        }
+      }
+      return { all_materials: MATERIAL_TYPES, raw_resources: RESOURCE_TYPES, processing_chains: chains };
+    },
+
+    market: () => ({
+      base_prices: BASE_MARKET_PRICES,
+      import_multiplier: IMPORT_PRICE_MULTIPLIER,
+      volatility: MARKET_VOLATILITY,
+      price_range: { min: MARKET_PRICE_MIN, max: MARKET_PRICE_MAX },
+      supply_pressure: { factor: SUPPLY_PRESSURE_FACTOR, decay: SUPPLY_PRESSURE_DECAY },
+    }),
+
+    rules: () => ({
+      territory: { buildings: TERRITORY_BUILDINGS, radius: TERRITORY_RADIUS, tax_per_building: TAX_PER_BUILDING },
+      workers: { capacity: WORKER_CAPACITY, money_capacity: WORKER_MONEY_CAPACITY, upkeep_per_tick: WORKER_UPKEEP, cost: WORKER_COST, starting_workers: STARTING_WORKERS },
+      ambassadors: { cooldown_ticks: AMBASSADOR_COOLDOWN_TICKS, max_percent_by_tier: AMBASSADOR_MAX_PERCENT_BY_TIER },
+      map: { tiles_per_map: TILES_PER_MAP, resource_density: RESOURCE_DENSITY, expansion_cost: MAP_EXPANSION_COST, starting_money: STARTING_MONEY, new_player_protection_ticks: NEW_PLAYER_PROTECTION_TICKS },
+      tier3_resources: TIER3_RESOURCES,
+    }),
+  };
+
+  mcp.tool(
+    "get_specs",
+    "Get static game specifications. Categories: buildings (costs, recipes, capacity), research (tech tree, prerequisites, unlocks), materials (processing chains, raw→tier3), market (base prices, volatility), rules (territory, tax, workers, ambassadors). Call with category='all' for everything.",
+    {
+      category: z.enum(["buildings", "research", "materials", "market", "rules", "all"])
+        .describe("Which spec category to retrieve, or 'all' for everything"),
+    },
+    async ({ category }) => {
+      if (category === "all") {
+        const all = Object.fromEntries(
+          Object.entries(specBuilders).map(([k, fn]) => [k, fn()])
+        );
+        return { content: [{ type: "text" as const, text: JSON.stringify(all, null, 2) }] };
+      }
+      const data = specBuilders[category]();
+      return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  // ══════════════════════════════════════════════════════
+  // ── MCP Resources (static game specs — kept for clients that support resources) ──
   // ══════════════════════════════════════════════════════
 
   // ── Building Specs ──
