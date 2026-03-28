@@ -1,0 +1,82 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .body {
+        fill: #8f969d;
+        stroke: #5f666d;
+        stroke-width: 4;
+      }
+
+      .inner-shape {
+        fill: #a7adb4;
+        fill-opacity: 0.18;
+      }
+
+      .dot {
+        fill: #2f3439;
+      }
+
+      .hub {
+        fill: #41474e;
+        fill-opacity: 0.7;
+      }
+    </style>
+  </defs>
+
+  <!-- Rounded triangle body -->
+  <path
+    class="body"
+    d="
+      M 120 28
+      Q 148 28 163 52
+      L 205 126
+      Q 219 150 201 169
+      Q 183 188 157 191
+      L 83 191
+      Q 57 188 39 169
+      Q 21 150 35 126
+      L 77 52
+      Q 92 28 120 28
+      Z
+    "
+  />
+
+  <!-- Soft inset panel -->
+  <path
+    class="inner-shape"
+    d="
+      M 120 54
+      Q 141 54 153 72
+      L 184 126
+      Q 195 144 181 158
+      Q 167 172 148 174
+      L 92 174
+      Q 73 172 59 158
+      Q 45 144 56 126
+      L 87 72
+      Q 99 54 120 54
+      Z
+    "
+  />
+
+  <!-- Central hub -->
+  <circle class="hub" cx="120" cy="120" r="10" />
+
+  <!-- Rotating 5-dot circle -->
+  <g>
+    <animateTransform
+      attributeName="transform"
+      type="rotate"
+      from="0 120 120"
+      to="360 120 120"
+      dur="4.5s"
+      repeatCount="indefinite"
+    />
+
+    <circle class="dot" cx="120" cy="88" r="6" />
+    <circle class="dot" cx="150.43" cy="110.11" r="6" />
+    <circle class="dot" cx="138.80" cy="145.89" r="6" />
+    <circle class="dot" cx="101.20" cy="145.89" r="6" />
+    <circle class="dot" cx="89.57" cy="110.11" r="6" />
+  </g>
+</svg>

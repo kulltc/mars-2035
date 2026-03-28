@@ -503,10 +503,11 @@ export function BuildingDetail() {
         if (materials.size === 0) return null;
 
         const allSorted = [...materials].sort();
+        const allMaterials = MATERIAL_TYPES.filter((m) => m !== "money").slice().sort();
         const priority = allSorted.filter((m) => recipeInputs.has(m));
-        const other = allSorted.filter((m) => !recipeInputs.has(m));
+        const other = allMaterials.filter((m) => !recipeInputs.has(m));
         const showExpand = other.length > 0;
-        const visibleMaterials = showExpand && !bufferStockExpanded ? priority : allSorted;
+        const visibleMaterials = showExpand && !bufferStockExpanded ? (priority.length > 0 ? priority : allSorted) : allMaterials;
 
         const renderRow = (mat: MaterialType) => {
           const serverMin = building.buffer_stock?.[mat] ?? 0;
@@ -581,7 +582,7 @@ export function BuildingDetail() {
                   style={{ fontSize: 11, marginTop: 2, alignSelf: "flex-start" }}
                   onClick={() => setBufferStockExpanded(!bufferStockExpanded)}
                 >
-                  {bufferStockExpanded ? `Hide ${other.length} more` : `Show ${other.length} more`}
+                  {bufferStockExpanded ? "Show less" : `Show all (${allMaterials.length})`}
                 </button>
               )}
             </div>

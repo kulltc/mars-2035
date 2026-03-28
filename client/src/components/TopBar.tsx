@@ -65,7 +65,7 @@ export function TopBar() {
       if (showMainMenu && menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
         toggleMainMenu();
       }
-      if (showInventory && inventoryContainerRef.current && !inventoryContainerRef.current.contains(e.target as Node)) {
+      if (showInventory && inventoryContainerRef.current && !inventoryContainerRef.current.contains(e.target as Node) && inventoryRef.current && !inventoryRef.current.contains(e.target as Node)) {
         toggleInventory();
       }
     };

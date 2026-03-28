@@ -234,6 +234,15 @@ export async function placeBuilding(
     output_buffer: def.recipe ? {} : undefined,
   };
 
+  // Set default buffer_stock to 50% of capacity for each recipe input
+  if (def.recipe) {
+    const bufferAmount = Math.round(capacity * 0.5);
+    building.buffer_stock = {};
+    for (const mat of Object.keys(def.recipe.inputs) as MaterialType[]) {
+      building.buffer_stock[mat] = bufferAmount;
+    }
+  }
+
   // Seed admin outpost with starting money
   if (buildingClass === "admin_outpost") {
     building.inventory.money = STARTING_MONEY;

@@ -32,9 +32,79 @@ const workerSpreadOffsets = new Map<string, { x: number; y: number }>();
 // Reusable offscreen canvas for work-area shape compositing (avoids creating one per frame)
 let areaOffCanvas: HTMLCanvasElement | null = null;
 
-// ── Ambassador sprite ──
-let ambassadorSpriteCanvas: HTMLCanvasElement | null = null;
+// ── Ambassador ──
 const ambassadorAngles = new Map<string, number>();
+
+/** Draw the ambassador SVG shape (rounded triangle + rotating dots) directly on a canvas context */
+function drawAmbassadorShape(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  time: number,
+) {
+  const s = size / 240; // scale factor from 240x240 SVG viewBox
+
+  ctx.save();
+  ctx.translate(cx - size / 2, cy - size / 2);
+
+  // Body (rounded triangle)
+  ctx.beginPath();
+  ctx.moveTo(120 * s, 28 * s);
+  ctx.quadraticCurveTo(148 * s, 28 * s, 163 * s, 52 * s);
+  ctx.lineTo(205 * s, 126 * s);
+  ctx.quadraticCurveTo(219 * s, 150 * s, 201 * s, 169 * s);
+  ctx.quadraticCurveTo(183 * s, 188 * s, 157 * s, 191 * s);
+  ctx.lineTo(83 * s, 191 * s);
+  ctx.quadraticCurveTo(57 * s, 188 * s, 39 * s, 169 * s);
+  ctx.quadraticCurveTo(21 * s, 150 * s, 35 * s, 126 * s);
+  ctx.lineTo(77 * s, 52 * s);
+  ctx.quadraticCurveTo(92 * s, 28 * s, 120 * s, 28 * s);
+  ctx.closePath();
+  ctx.fillStyle = "#8f969d";
+  ctx.fill();
+  ctx.strokeStyle = "#5f666d";
+  ctx.lineWidth = 4 * s;
+  ctx.stroke();
+
+  // Inner panel
+  ctx.beginPath();
+  ctx.moveTo(120 * s, 54 * s);
+  ctx.quadraticCurveTo(141 * s, 54 * s, 153 * s, 72 * s);
+  ctx.lineTo(184 * s, 126 * s);
+  ctx.quadraticCurveTo(195 * s, 144 * s, 181 * s, 158 * s);
+  ctx.quadraticCurveTo(167 * s, 172 * s, 148 * s, 174 * s);
+  ctx.lineTo(92 * s, 174 * s);
+  ctx.quadraticCurveTo(73 * s, 172 * s, 59 * s, 158 * s);
+  ctx.quadraticCurveTo(45 * s, 144 * s, 56 * s, 126 * s);
+  ctx.lineTo(87 * s, 72 * s);
+  ctx.quadraticCurveTo(99 * s, 54 * s, 120 * s, 54 * s);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(167, 173, 180, 0.18)";
+  ctx.fill();
+
+  // Central hub
+  ctx.beginPath();
+  ctx.arc(120 * s, 120 * s, 10 * s, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(65, 71, 78, 0.7)";
+  ctx.fill();
+
+  // Rotating 5-dot ring
+  const dotRadius = 32 * s; // distance from center
+  const dotSize = 6 * s;
+  const rotAngle = (time / 4500) * Math.PI * 2; // 4.5s full rotation
+  for (let i = 0; i < 5; i++) {
+    const angle = rotAngle + (i * Math.PI * 2) / 5 - Math.PI / 2;
+    const dx = 120 * s + Math.cos(angle) * dotRadius;
+    const dy = 120 * s + Math.sin(angle) * dotRadius;
+    ctx.beginPath();
+    ctx.arc(dx, dy, dotSize, 0, Math.PI * 2);
+    ctx.fillStyle = "#2f3439";
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
 
 function loadWorkerSprite(src: string, onDone: (canvas: HTMLCanvasElement) => void) {
   const img = new Image();
@@ -62,7 +132,6 @@ function loadWorkerSprite(src: string, onDone: (canvas: HTMLCanvasElement) => vo
 
 loadWorkerSprite("/worker-empty.png",  (c) => { workerSpriteCanvas   = c; });
 loadWorkerSprite("/worker-filled.png", (c) => { workerCarryingCanvas = c; });
-loadWorkerSprite("/ambassador.png",    (c) => { ambassadorSpriteCanvas = c; });
 
 // ── Colors ──
 
@@ -898,7 +967,7 @@ export function MapCanvas() {
         if (asx < -ts || asx > w + ts || asy < -ts || asy > h + ts) continue;
 
         const isOwn = amb.owner_id === playerId;
-        const spriteSize = Math.max(12, ts * 1.375);
+        const spriteSize = Math.max(8, ts * 0.6875);
 
         // Smooth directional rotation (same approach as workers)
         let displayAngle = ambassadorAngles.get(amb.entity_id) ?? 0;
@@ -915,32 +984,15 @@ export function MapCanvas() {
         }
         ambassadorAngles.set(amb.entity_id, displayAngle);
 
-        if (ambassadorSpriteCanvas) {
+        {
           const bob = isMoving
             ? Math.sin(now / 250 + ax * 0.5 + ay * 0.5) * Math.min(3, ts * 0.06) : 0;
           ctx.save();
-          ctx.translate(asx, asy);
+          ctx.translate(asx, asy + bob);
           ctx.rotate(displayAngle + Math.PI / 2);
           ctx.globalAlpha = isOwn ? 1.0 : 0.7;
-          ctx.drawImage(
-            ambassadorSpriteCanvas,
-            -spriteSize / 2,
-            -spriteSize / 2 + bob,
-            spriteSize,
-            spriteSize,
-          );
+          drawAmbassadorShape(ctx, 0, 0, spriteSize, now);
           ctx.restore();
-        } else {
-          // Fallback diamond while sprite loads
-          const radius = Math.max(4, ts * 0.14);
-          ctx.beginPath();
-          ctx.moveTo(asx, asy - radius);
-          ctx.lineTo(asx + radius, asy);
-          ctx.lineTo(asx, asy + radius);
-          ctx.lineTo(asx - radius, asy);
-          ctx.closePath();
-          ctx.fillStyle = isOwn ? "#ff8a65" : "#ef5350";
-          ctx.fill();
         }
       }
 

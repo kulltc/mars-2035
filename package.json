@@ -1,5 +1,5 @@
 {
   "name": "mars-2035",
   "private": true,
-  "workspaces": ["shared", "server", "client"]
+  "workspaces": ["shared", "server", "client", "mcp-server"]
 }

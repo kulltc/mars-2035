@@ -21,6 +21,17 @@ services:
       postgres:
         condition: service_healthy
 
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp-server/Dockerfile
+    environment:
+      MARS_SERVER_URL: http://server:3000
+      MCP_BASE_URL: https://test.mars-2034.online
+      MCP_PORT: "3001"
+    depends_on:
+      - server
+
   client:
     build:
       context: .
@@ -29,6 +40,7 @@ services:
       - "8082:80"
     depends_on:
       - server
+      - mcp-server
 
 volumes:
   pgdata-dev:
