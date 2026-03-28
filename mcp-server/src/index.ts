@@ -899,8 +899,15 @@ app.all("/mcp", express.json(), bearerAuth, async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-app.listen(MCP_PORT, "0.0.0.0", () => {
-  console.log(
-    `Mars 2035 MCP server listening on ${BASE_URL}/mcp`
-  );
-});
+import { initTokenStore } from "./db.js";
+
+initTokenStore()
+  .then(() => {
+    app.listen(MCP_PORT, "0.0.0.0", () => {
+      console.log(`Mars 2035 MCP server listening on ${BASE_URL}/mcp`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize token store:", err);
+    process.exit(1);
+  });

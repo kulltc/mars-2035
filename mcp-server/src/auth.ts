@@ -2,6 +2,9 @@
  * OAuth provider for the MCP server, backed by the game server's
  * username/password login (/api/auth/login).
  *
+ * Token and client state is persisted to Postgres so container restarts
+ * don't invalidate existing sessions.
+ *
  * Flow:
  * 1. MCP client registers dynamically
  * 2. Client redirects user to /authorize
@@ -25,38 +28,18 @@ import type {
   OAuthTokenRevocationRequest,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import * as db from "./db.js";
 
 const GAME_SERVER_URL = process.env.MARS_SERVER_URL ?? "http://localhost:3000";
 
-// ── In-memory stores ──
-
-const clients = new Map<string, OAuthClientInformationFull>();
-
-// Auth codes: code → { clientId, redirectUri, codeChallenge, gameToken, playerId }
-const authCodes = new Map<
-  string,
-  {
-    clientId: string;
-    redirectUri: string;
-    codeChallenge: string;
-    gameToken: string;
-    playerId: string;
-  }
->();
-
-// Access tokens: token → { gameToken, playerId, clientId }
-const accessTokens = new Map<
-  string,
-  { gameToken: string; playerId: string; clientId: string }
->();
-
-// ── Clients store ──
+// ── Clients store (Postgres-backed) ──
 
 export const clientsStore: OAuthRegisteredClientsStore = {
-  getClient(clientId: string) {
-    return clients.get(clientId);
+  async getClient(clientId: string) {
+    const data = await db.getClient(clientId);
+    return data as OAuthClientInformationFull | undefined;
   },
-  registerClient(
+  async registerClient(
     client: Omit<OAuthClientInformationFull, "client_id" | "client_id_issued_at">
   ) {
     const clientId = randomUUID();
@@ -65,7 +48,7 @@ export const clientsStore: OAuthRegisteredClientsStore = {
       client_id: clientId,
       client_id_issued_at: Math.floor(Date.now() / 1000),
     } as OAuthClientInformationFull;
-    clients.set(clientId, full);
+    await db.saveClient(clientId, full);
     return full;
   },
 };
@@ -123,7 +106,7 @@ export const oauthProvider: OAuthServerProvider = {
     _client: OAuthClientInformationFull,
     authorizationCode: string
   ) {
-    const entry = authCodes.get(authorizationCode);
+    const entry = await db.getAuthCode(authorizationCode);
     if (!entry) throw new Error("Invalid authorization code");
     return entry.codeChallenge;
   },
@@ -132,13 +115,13 @@ export const oauthProvider: OAuthServerProvider = {
     _client: OAuthClientInformationFull,
     authorizationCode: string
   ): Promise<OAuthTokens> {
-    const entry = authCodes.get(authorizationCode);
+    const entry = await db.getAuthCode(authorizationCode);
     if (!entry) throw new Error("Invalid authorization code");
-    authCodes.delete(authorizationCode);
+    await db.deleteAuthCode(authorizationCode);
 
     // Issue an access token that maps to the game JWT
     const accessToken = randomBytes(32).toString("hex");
-    accessTokens.set(accessToken, {
+    await db.saveAccessToken(accessToken, {
       gameToken: entry.gameToken,
       playerId: entry.playerId,
       clientId: entry.clientId,
@@ -156,7 +139,7 @@ export const oauthProvider: OAuthServerProvider = {
   },
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
-    const entry = accessTokens.get(token);
+    const entry = await db.getAccessToken(token);
     if (!entry) throw new Error("Invalid access token");
     return {
       token,
@@ -174,7 +157,7 @@ export const oauthProvider: OAuthServerProvider = {
     _client: OAuthClientInformationFull,
     request: OAuthTokenRevocationRequest
   ) {
-    accessTokens.delete(request.token);
+    await db.deleteAccessToken(request.token);
   },
 };
 
@@ -222,18 +205,15 @@ export async function handleAuthorizeCallback(
     player: { entity_id: string };
   };
 
-  // Store auth code
+  // Store auth code in DB
   const code = randomBytes(16).toString("hex");
-  authCodes.set(code, {
+  await db.saveAuthCode(code, {
     clientId: client_id,
     redirectUri: redirect_uri,
     codeChallenge: code_challenge,
     gameToken: loginData.token,
     playerId: loginData.player.entity_id,
   });
-
-  // Auto-expire auth codes after 5 minutes
-  setTimeout(() => authCodes.delete(code), 5 * 60 * 1000);
 
   // Redirect back to client with code
   const url = new URL(redirect_uri);
