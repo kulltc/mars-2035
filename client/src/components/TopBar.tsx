@@ -226,6 +226,23 @@ export function TopBar() {
         </>
       )}
       <button
+        className="main-menu-item"
+        onClick={() => {
+          toggleMainMenu();
+          const token = localStorage.getItem("mars_token");
+          if (token) {
+            navigator.clipboard.writeText(token).then(
+              () => addNotification("MCP token copied to clipboard", "success"),
+              () => addNotification("Failed to copy token", "error"),
+            );
+          } else {
+            addNotification("No token available", "error");
+          }
+        }}
+      >
+        Copy MCP Token
+      </button>
+      <button
         className="main-menu-item danger"
         onClick={() => { toggleMainMenu(); setShowForfeitConfirm(true); }}
       >

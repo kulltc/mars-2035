@@ -32,6 +32,24 @@ import * as db from "./db.js";
 
 const GAME_SERVER_URL = process.env.MARS_SERVER_URL ?? "http://localhost:3000";
 
+// ── JWT fallback: validate a game JWT by calling the game server ──
+
+async function verifyGameJwt(
+  token: string
+): Promise<{ playerId: string } | undefined> {
+  try {
+    const res = await fetch(`${GAME_SERVER_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as { player?: { entity_id: string } };
+    if (!data.player?.entity_id) return undefined;
+    return { playerId: data.player.entity_id };
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Clients store (Postgres-backed) ──
 
 export const clientsStore: OAuthRegisteredClientsStore = {
@@ -139,18 +157,37 @@ export const oauthProvider: OAuthServerProvider = {
   },
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
+    // 1. Try OAuth access token (DB lookup)
     const entry = await db.getAccessToken(token);
-    if (!entry) throw new Error("Invalid access token");
-    return {
-      token,
-      clientId: entry.clientId,
-      scopes: [],
-      expiresAt: Math.floor(Date.now() / 1000) + 86400,
-      extra: {
-        gameToken: entry.gameToken,
-        playerId: entry.playerId,
-      },
-    };
+    if (entry) {
+      return {
+        token,
+        clientId: entry.clientId,
+        scopes: [],
+        expiresAt: Math.floor(Date.now() / 1000) + 86400,
+        extra: {
+          gameToken: entry.gameToken,
+          playerId: entry.playerId,
+        },
+      };
+    }
+
+    // 2. Fallback: try as a game JWT (for UI-issued tokens)
+    const jwt = await verifyGameJwt(token);
+    if (jwt) {
+      return {
+        token,
+        clientId: "jwt-direct",
+        scopes: [],
+        expiresAt: Math.floor(Date.now() / 1000) + 86400,
+        extra: {
+          gameToken: token,
+          playerId: jwt.playerId,
+        },
+      };
+    }
+
+    throw new Error("Invalid access token");
   },
 
   async revokeToken(
