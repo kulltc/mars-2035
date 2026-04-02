@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
+agent/data/
+agent/.venv/
+agent/uv.lock
+__pycache__/
+agent/.env

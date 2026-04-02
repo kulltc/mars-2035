@@ -46,5 +46,21 @@ services:
       - server
       - mcp-server
 
+  agent-admin:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    env_file:
+      - agent/.env
+    environment:
+      GAME_SERVER_URL: http://server:3000
+      MCP_SERVER_URL: http://mcp-server:3001/mcp
+    volumes:
+      - agent-data:/app/agent/data
+    depends_on:
+      - server
+      - mcp-server
+
 volumes:
   pgdata-dev:
+  agent-data:

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mars 2035 Agent Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .status-pending { background: #facc15; }
+    .status-running { background: #3b82f6; animation: pulse 1s infinite; }
+    .status-paused { background: #9ca3af; }
+    .status-error { background: #ef4444; }
+    .status-stopped { background: #6b7280; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-200 h-screen flex" x-data="adminApp()" x-init="init()">
+
+  <!-- Left Sidebar -->
+  <aside class="w-72 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
+    <div class="p-4 border-b border-gray-800">
+      <h1 class="text-lg font-bold text-orange-400">Mars 2035 Agents</h1>
+    </div>
+
+    <!-- Agent List -->
+    <div class="flex-1 overflow-y-auto">
+      <template x-for="agent in agents" :key="agent.agent_id">
+        <div class="px-4 py-3 cursor-pointer border-b border-gray-800 hover:bg-gray-800 transition"
+             :class="selectedAgentId === agent.agent_id ? 'bg-gray-800' : ''"
+             @click="selectAgent(agent.agent_id)">
+          <div class="flex items-center gap-2">
+            <span class="status-dot" :class="'status-' + agent.status"></span>
+            <span class="font-medium" x-text="agent.name"></span>
+          </div>
+          <div class="text-xs text-gray-500 mt-1" x-text="agent.username"></div>
+        </div>
+      </template>
+      <div x-show="agents.length === 0" class="p-4 text-gray-500 text-sm">No agents yet.</div>
+    </div>
+
+    <!-- Add Agent -->
+    <div class="p-4 border-t border-gray-800">
+      <button @click="showAddModal = true"
+              class="w-full bg-orange-600 hover:bg-orange-500 text-white py-2 px-4 rounded text-sm font-medium">
+        + Add Agent
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col h-full overflow-hidden">
+    <!-- No agent selected -->
+    <template x-if="!selectedAgentId">
+      <div class="flex-1 flex items-center justify-center text-gray-600">
+        Select an agent from the sidebar
+      </div>
+    </template>
+
+    <!-- Agent selected -->
+    <template x-if="selectedAgentId && agentDetail">
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between bg-gray-900">
+          <div>
+            <h2 class="text-xl font-bold" x-text="agentDetail.name"></h2>
+            <div class="text-sm text-gray-400 flex items-center gap-2 mt-1">
+              <span class="status-dot" :class="'status-' + agentDetail.status"></span>
+              <span x-text="agentDetail.status"></span>
+              <span class="text-gray-600">|</span>
+              <span x-text="'Last active: ' + formatDate(agentDetail.last_active_at)"></span>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button @click="loginAsAgent()" class="btn-sm bg-indigo-600 hover:bg-indigo-500">Login as Agent</button>
+            <button x-show="agentDetail.status !== 'running'" @click="runTurn()"
+                    class="btn-sm bg-green-600 hover:bg-green-500">Run Turn</button>
+            <button x-show="agentDetail.status === 'running'" disabled
+                    class="btn-sm bg-green-800 text-green-400 cursor-wait">
+              <span class="inline-block animate-spin mr-1">&#9696;</span> Running...
+            </button>
+            <button x-show="agentDetail.status !== 'paused'" @click="pauseAgent()"
+                    class="btn-sm bg-yellow-700 hover:bg-yellow-600">Pause</button>
+            <button x-show="agentDetail.status === 'paused'" @click="resumeAgent()"
+                    class="btn-sm bg-blue-600 hover:bg-blue-500">Resume</button>
+            <button @click="confirmDelete()" class="btn-sm bg-red-700 hover:bg-red-600">Delete</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-800 bg-gray-900 px-6">
+          <button @click="tab = 'overview'" class="tab-btn" :class="tab === 'overview' ? 'tab-active' : ''">Overview</button>
+          <button @click="tab = 'turns'" class="tab-btn" :class="tab === 'turns' ? 'tab-active' : ''">
+            Turn History
+            <span class="ml-1 text-xs bg-gray-700 px-1.5 py-0.5 rounded" x-text="turns.length"></span>
+          </button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="flex-1 overflow-y-auto p-6">
+          <!-- Overview Tab -->
+          <div x-show="tab === 'overview'" x-cloak>
+            <!-- Token Usage Summary -->
+            <template x-if="turns.length > 0">
+              <div class="mb-6 bg-gray-900 rounded-lg p-4 border border-gray-800">
+                <h3 class="text-sm font-semibold text-gray-400 mb-2">Total Token Usage</h3>
+                <div class="flex gap-6 text-sm">
+                  <div>
+                    <span class="text-gray-500">Total Tokens:</span>
+                    <span class="ml-1 font-mono text-orange-400" x-text="totalTokens.toLocaleString()"></span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">Turns:</span>
+                    <span class="ml-1 font-mono" x-text="turns.length"></span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">Avg/Turn:</span>
+                    <span class="ml-1 font-mono" x-text="turns.length ? Math.round(totalTokens / turns.length).toLocaleString() : '0'"></span>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Agent Info -->
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+                <h3 class="text-sm font-semibold text-gray-400 mb-2">Details</h3>
+                <div class="text-sm space-y-1">
+                  <div><span class="text-gray-500">ID:</span> <span class="font-mono" x-text="agentDetail.agent_id"></span></div>
+                  <div><span class="text-gray-500">Username:</span> <span x-text="agentDetail.username"></span></div>
+                  <div><span class="text-gray-500">Created:</span> <span x-text="formatDate(agentDetail.created_at)"></span></div>
+                  <template x-if="agentDetail.error_message">
+                    <div class="text-red-400"><span class="text-gray-500">Error:</span> <span x-text="agentDetail.error_message"></span></div>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Todos -->
+              <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+                <h3 class="text-sm font-semibold text-gray-400 mb-2">
+                  Todos
+                  <span class="text-gray-600" x-text="'(' + (agentDetail.todos?.length || 0) + ')'"></span>
+                </h3>
+                <div class="text-sm space-y-1 max-h-48 overflow-y-auto">
+                  <template x-for="t in (agentDetail.todos || [])" :key="t.id">
+                    <div class="flex items-center gap-2">
+                      <span class="font-mono text-xs"
+                            :class="t.status === 'done' ? 'text-green-400' : t.status === 'in_progress' ? 'text-blue-400' : 'text-gray-500'"
+                            x-text="t.status === 'done' ? '[x]' : t.status === 'in_progress' ? '[~]' : '[ ]'"></span>
+                      <span :class="t.status === 'done' ? 'line-through text-gray-600' : ''" x-text="t.text"></span>
+                      <span class="text-xs px-1.5 rounded"
+                            :class="t.priority === 'high' ? 'bg-red-900 text-red-300' : t.priority === 'medium' ? 'bg-yellow-900 text-yellow-300' : 'bg-gray-800 text-gray-400'"
+                            x-text="t.priority"></span>
+                    </div>
+                  </template>
+                  <div x-show="!agentDetail.todos?.length" class="text-gray-600">No todos.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scratchpad -->
+            <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+              <h3 class="text-sm font-semibold text-gray-400 mb-2">
+                Scratchpad
+                <span class="text-gray-600" x-text="'(' + (agentDetail.scratchpad?.length || 0) + ' chars)'"></span>
+              </h3>
+              <pre class="text-sm text-gray-300 max-h-64 overflow-y-auto bg-gray-950 rounded p-3"
+                   x-text="agentDetail.scratchpad || '(empty)'"></pre>
+            </div>
+          </div>
+
+          <!-- Turn History Tab -->
+          <div x-show="tab === 'turns'" x-cloak>
+            <div x-show="turns.length === 0" class="text-gray-500">No turns recorded yet. Click "Run Turn" to start.</div>
+
+            <!-- Turn list / detail -->
+            <template x-if="!selectedTurn">
+              <div class="space-y-2">
+                <template x-for="t in [...turns].reverse()" :key="t.turn_number">
+                  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800 cursor-pointer hover:border-gray-600 transition"
+                       @click="loadTurn(t.turn_number)">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <span class="font-mono text-orange-400 font-bold" x-text="'#' + t.turn_number"></span>
+                        <span class="text-sm text-gray-400" x-text="formatDate(t.started_at)"></span>
+                      </div>
+                      <div class="flex items-center gap-4 text-sm">
+                        <span class="text-gray-500">
+                          <span class="font-mono" x-text="t.tool_call_count"></span> tool calls
+                        </span>
+                        <span class="text-gray-500">
+                          <span class="font-mono text-orange-400" x-text="(t.total_tokens || 0).toLocaleString()"></span> tokens
+                        </span>
+                        <span class="px-2 py-0.5 rounded text-xs"
+                              :class="t.status === 'completed' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'"
+                              x-text="t.status"></span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- Turn Detail (drill-down) -->
+            <template x-if="selectedTurn">
+              <div>
+                <button @click="selectedTurn = null" class="text-sm text-blue-400 hover:text-blue-300 mb-4">
+                  &larr; Back to turn list
+                </button>
+
+                <!-- Turn header -->
+                <div class="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold">
+                      Turn #<span x-text="selectedTurn.turn_number"></span>
+                    </h3>
+                    <span class="px-2 py-0.5 rounded text-xs"
+                          :class="selectedTurn.status === 'completed' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'"
+                          x-text="selectedTurn.status"></span>
+                  </div>
+                  <div class="flex gap-6 text-sm text-gray-400 mt-2">
+                    <div>Started: <span x-text="formatDate(selectedTurn.started_at)"></span></div>
+                    <div>Finished: <span x-text="formatDate(selectedTurn.finished_at)"></span></div>
+                    <div>Input: <span class="font-mono text-blue-400" x-text="(selectedTurn.usage?.input_tokens || 0).toLocaleString()"></span></div>
+                    <div>Output: <span class="font-mono text-green-400" x-text="(selectedTurn.usage?.output_tokens || 0).toLocaleString()"></span></div>
+                    <div>Total: <span class="font-mono text-orange-400" x-text="(selectedTurn.usage?.total_tokens || 0).toLocaleString()"></span></div>
+                  </div>
+                </div>
+
+                <!-- Steps timeline -->
+                <div class="space-y-1">
+                  <template x-for="(step, i) in selectedTurn.steps" :key="i">
+                    <div class="border-l-2 ml-2 pl-4 py-1"
+                         :class="step.type === 'ai' ? 'border-blue-600' : 'border-green-600'">
+
+                      <!-- AI Step -->
+                      <template x-if="step.type === 'ai'">
+                        <div>
+                          <div class="flex items-center gap-2 cursor-pointer select-none"
+                               @click="toggleStep(i)">
+                            <span class="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-900 text-blue-300">AI</span>
+                            <template x-if="step.tool_calls?.length">
+                              <span class="text-sm text-gray-400"
+                                    x-text="step.tool_calls.map(tc => tc.name).join(', ')"></span>
+                            </template>
+                            <template x-if="!step.tool_calls?.length">
+                              <span class="text-sm text-gray-500 italic">final response</span>
+                            </template>
+                            <span class="ml-auto text-xs text-gray-600 font-mono"
+                                  x-text="step.usage ? (step.usage.total_tokens || 0).toLocaleString() + ' tok' : ''"></span>
+                            <span class="text-gray-600 text-xs" x-text="expandedSteps[i] ? '&#9660;' : '&#9654;'"></span>
+                          </div>
+
+                          <div x-show="expandedSteps[i]" x-cloak class="mt-2 space-y-2">
+                            <!-- AI text content -->
+                            <template x-if="step.content">
+                              <pre class="bg-gray-950 rounded p-3 text-sm text-gray-300 max-h-64 overflow-y-auto"
+                                   x-text="step.content"></pre>
+                            </template>
+                            <!-- Tool call args -->
+                            <template x-for="tc in (step.tool_calls || [])" :key="tc.id">
+                              <div class="bg-yellow-950 border border-yellow-900 rounded p-3">
+                                <div class="text-sm font-bold text-yellow-400" x-text="tc.name"></div>
+                                <pre class="text-xs text-yellow-200 mt-1"
+                                     x-text="JSON.stringify(tc.args, null, 2)"></pre>
+                              </div>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+
+                      <!-- Tool Result Step -->
+                      <template x-if="step.type === 'tool'">
+                        <div>
+                          <div class="flex items-center gap-2 cursor-pointer select-none"
+                               @click="toggleStep(i)">
+                            <span class="text-xs font-bold px-1.5 py-0.5 rounded bg-green-900 text-green-300">TOOL</span>
+                            <span class="text-sm text-gray-400" x-text="step.name || 'result'"></span>
+                            <span class="ml-auto text-xs text-gray-600"
+                                  x-text="(step.content?.length || 0) + ' chars'"></span>
+                            <span class="text-gray-600 text-xs" x-text="expandedSteps[i] ? '&#9660;' : '&#9654;'"></span>
+                          </div>
+
+                          <div x-show="expandedSteps[i]" x-cloak class="mt-2">
+                            <pre class="bg-gray-950 rounded p-3 text-sm text-green-200 max-h-64 overflow-y-auto"
+                                 x-text="step.content"></pre>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Final Response -->
+                <template x-if="selectedTurn.final_response">
+                  <div class="mt-6 bg-gray-900 rounded-lg p-4 border border-gray-800">
+                    <h4 class="text-sm font-semibold text-gray-400 mb-2">Final Response</h4>
+                    <pre class="text-sm text-gray-300 max-h-48 overflow-y-auto"
+                         x-text="selectedTurn.final_response"></pre>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+  </main>
+
+  <!-- Add Agent Modal -->
+  <div x-show="showAddModal" x-cloak
+       class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+       @click.self="showAddModal = false">
+    <div class="bg-gray-900 rounded-lg p-6 w-96 border border-gray-700">
+      <h3 class="text-lg font-bold mb-4">Add Agent</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="text-sm text-gray-400">Display Name</label>
+          <input x-model="newAgent.name" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mt-1" placeholder="MyBot">
+        </div>
+        <div>
+          <label class="text-sm text-gray-400">Game Username</label>
+          <input x-model="newAgent.username" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mt-1" placeholder="bot_user">
+        </div>
+        <div>
+          <label class="text-sm text-gray-400">Game Password</label>
+          <input x-model="newAgent.password" type="password" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mt-1" placeholder="password">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button @click="showAddModal = false" class="btn-sm bg-gray-700 hover:bg-gray-600">Cancel</button>
+        <button @click="addAgent()" class="btn-sm bg-orange-600 hover:bg-orange-500">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div x-show="showDeleteModal" x-cloak
+       class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+       @click.self="showDeleteModal = false">
+    <div class="bg-gray-900 rounded-lg p-6 w-96 border border-gray-700">
+      <h3 class="text-lg font-bold mb-2 text-red-400">Delete Agent</h3>
+      <p class="text-sm text-gray-400 mb-4">
+        Are you sure you want to delete <strong x-text="agentDetail?.name"></strong> and all its data?
+      </p>
+      <div class="flex justify-end gap-2">
+        <button @click="showDeleteModal = false" class="btn-sm bg-gray-700 hover:bg-gray-600">Cancel</button>
+        <button @click="deleteAgent()" class="btn-sm bg-red-700 hover:bg-red-600">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function adminApp() {
+      // Detect base path: if served at /admin, API is at /admin/api; if standalone, /api
+      const basePath = window.location.pathname.replace(/\/$/, '');
+      const API = basePath.includes('/admin') ? '/admin/api' : '/api';
+
+      return {
+        agents: [],
+        selectedAgentId: null,
+        agentDetail: null,
+        turns: [],
+        selectedTurn: null,
+        expandedSteps: {},
+        tab: 'overview',
+        showAddModal: false,
+        showDeleteModal: false,
+        newAgent: { name: '', username: '', password: '' },
+        pollInterval: null,
+
+        async init() {
+          await this.loadAgents();
+          // Auto-refresh agent list every 5s
+          setInterval(() => this.loadAgents(), 5000);
+        },
+
+        async loadAgents() {
+          const resp = await fetch(`${API}/agents`);
+          this.agents = await resp.json();
+          // Refresh detail if selected
+          if (this.selectedAgentId) {
+            const current = this.agents.find(a => a.agent_id === this.selectedAgentId);
+            if (!current) {
+              this.selectedAgentId = null;
+              this.agentDetail = null;
+            }
+          }
+        },
+
+        async selectAgent(id) {
+          this.selectedAgentId = id;
+          this.selectedTurn = null;
+          this.expandedSteps = {};
+          this.tab = 'overview';
+          await this.loadAgentDetail(id);
+          await this.loadTurns(id);
+        },
+
+        async loadAgentDetail(id) {
+          const resp = await fetch(`${API}/agents/${id}`);
+          this.agentDetail = await resp.json();
+        },
+
+        async loadTurns(id) {
+          const resp = await fetch(`${API}/agents/${id}/turns`);
+          this.turns = await resp.json();
+        },
+
+        async loadTurn(turnNumber) {
+          const resp = await fetch(`${API}/agents/${this.selectedAgentId}/turns/${turnNumber}`);
+          this.selectedTurn = await resp.json();
+          this.expandedSteps = {};
+        },
+
+        toggleStep(i) {
+          this.expandedSteps[i] = !this.expandedSteps[i];
+        },
+
+        get totalTokens() {
+          return this.turns.reduce((sum, t) => sum + (t.total_tokens || 0), 0);
+        },
+
+        async addAgent() {
+          if (!this.newAgent.name || !this.newAgent.username || !this.newAgent.password) return;
+          await fetch(`${API}/agents`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.newAgent),
+          });
+          this.showAddModal = false;
+          this.newAgent = { name: '', username: '', password: '' };
+          await this.loadAgents();
+        },
+
+        async runTurn() {
+          await fetch(`${API}/agents/${this.selectedAgentId}/run`, { method: 'POST' });
+          this.agentDetail.status = 'running';
+          // Poll until done
+          this.startPolling();
+        },
+
+        startPolling() {
+          if (this.pollInterval) clearInterval(this.pollInterval);
+          this.pollInterval = setInterval(async () => {
+            await this.loadAgentDetail(this.selectedAgentId);
+            await this.loadAgents();
+            if (this.agentDetail.status !== 'running') {
+              clearInterval(this.pollInterval);
+              this.pollInterval = null;
+              await this.loadTurns(this.selectedAgentId);
+            }
+          }, 2000);
+        },
+
+        async pauseAgent() {
+          await fetch(`${API}/agents/${this.selectedAgentId}/pause`, { method: 'POST' });
+          await this.loadAgentDetail(this.selectedAgentId);
+          await this.loadAgents();
+        },
+
+        async resumeAgent() {
+          await fetch(`${API}/agents/${this.selectedAgentId}/resume`, { method: 'POST' });
+          await this.loadAgentDetail(this.selectedAgentId);
+          await this.loadAgents();
+        },
+
+        confirmDelete() {
+          this.showDeleteModal = true;
+        },
+
+        async deleteAgent() {
+          await fetch(`${API}/agents/${this.selectedAgentId}`, { method: 'DELETE' });
+          this.showDeleteModal = false;
+          this.selectedAgentId = null;
+          this.agentDetail = null;
+          await this.loadAgents();
+        },
+
+        async loginAsAgent() {
+          const resp = await fetch(`${API}/agents/${this.selectedAgentId}/login-token`);
+          const { token } = await resp.json();
+          // Open game client on same origin (root path)
+          window.open(`/?agent_token=${token}`, '_blank');
+        },
+
+        formatDate(iso) {
+          if (!iso) return 'never';
+          const d = new Date(iso);
+          return d.toLocaleString();
+        },
+      };
+    }
+  </script>
+
+  <style>
+    .btn-sm {
+      @apply px-3 py-1.5 rounded text-sm font-medium text-white transition;
+    }
+    .tab-btn {
+      @apply px-4 py-2.5 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-200 transition;
+    }
+    .tab-active {
+      @apply text-orange-400 border-orange-400;
+    }
+  </style>
+</body>
+</html>

@@ -94,6 +94,18 @@ export function App() {
     });
   }, [setWorld, setCurrentMap]);
 
+  // Accept agent_token query param for admin UI login-as-agent
+  const setToken = useGameStore((s) => s.setToken);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const agentToken = params.get("agent_token");
+    if (agentToken) {
+      setToken(agentToken);
+      window.history.replaceState({}, "", window.location.pathname);
+      window.location.reload();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Restore session from token
   useEffect(() => {
     if (!token) return;
