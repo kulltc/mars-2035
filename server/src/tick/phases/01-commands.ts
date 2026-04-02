@@ -527,7 +527,7 @@ function handleConfigureWorker(store: WorldStore, player: Player, data: Record<s
 }
 
 function handleDoResearch(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
-  const { research_id } = data as { research_id: string };
+  const { research_id, map_key } = data as { research_id: string; map_key?: string };
 
   const def = RESEARCH_TREE[research_id];
   if (!def) return { ok: false, error: "Unknown research" };
@@ -543,12 +543,15 @@ function handleDoResearch(store: WorldStore, player: Player, data: Record<string
     }
   }
 
-  // Find a research_lab owned by this player (any map)
+  // Find a research_lab owned by this player, preferring the specified map
   let labMapKey: string | null = null;
   for (const b of store.buildings.values()) {
     if (b.class === "research_lab" && b.owner_id === player.entity_id && b.status === "active") {
-      labMapKey = b.map_key;
-      break;
+      if (map_key && b.map_key === map_key) {
+        labMapKey = b.map_key;
+        break;
+      }
+      if (!labMapKey) labMapKey = b.map_key;
     }
   }
   if (!labMapKey) return { ok: false, error: "No active Research Lab" };
@@ -654,6 +657,25 @@ function handleSetMaxStock(store: WorldStore, player: Player, data: Record<strin
     events: [{
       type: "route_executed",
       data: { building_id, resource, max_stock: amount, configured: true },
+      mapKey: building.map_key,
+    }],
+  };
+}
+
+function handleSetAutoRoute(store: WorldStore, player: Player, data: Record<string, unknown>): HandlerResult {
+  const { building_id, enabled } = data as { building_id: string; enabled: boolean };
+
+  const building = store.buildings.get(building_id);
+  if (!building) return { ok: false, error: "Building not found" };
+  if (building.owner_id !== player.entity_id) return { ok: false, error: "Not your building" };
+
+  building.auto_route = enabled;
+
+  return {
+    ok: true,
+    events: [{
+      type: "route_executed",
+      data: { building_id, auto_route: enabled },
       mapKey: building.map_key,
     }],
   };
@@ -1073,6 +1095,7 @@ const handlers: Record<CommandType, CommandHandler> = {
   do_research: handleDoResearch,
   set_buffer_stock: handleSetBufferStock,
   set_max_stock: handleSetMaxStock,
+  set_auto_route: handleSetAutoRoute,
   configure_quantum_rule: handleConfigureQuantumRule,
   delete_quantum_rule: handleDeleteQuantumRule,
   forfeit: handleForfeit,

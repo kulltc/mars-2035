@@ -451,49 +451,65 @@ function generatePickupTasks(store: WorldStore) {
   }
 }
 
-// For every resource in every building that has stock above buffer but no active user route,
-// generate an implied pickup task to the nearest active storage node (warehouse or admin outpost).
-// An active user route is one where: the route covers the resource AND the destination
-// is not blocked by max_stock. When an active route exists, the implied route is suppressed.
+// Find the nearest active storage node (warehouse or admin outpost) on the same map.
+function findNearestStorageForBuilding(store: WorldStore, building: Building): string | null {
+  const player = store.players.get(building.owner_id);
+  if (!player) return null;
+  const account = player.map_accounts[building.map_key];
+  const outpostId = account?.admin_outpost_building_id;
+  if (!outpostId || outpostId === building.entity_id) return null;
+
+  let nearestId = outpostId;
+  let nearestDist = Infinity;
+  for (const b of store.buildings.values()) {
+    if (b.owner_id !== building.owner_id) continue;
+    if (b.map_key !== building.map_key) continue;
+    if (b.status !== "active") continue;
+    if (b.class !== "admin_outpost" && b.class !== "warehouse") continue;
+    if (b.entity_id === building.entity_id) continue;
+    const dist = Math.hypot(b.location.x - building.location.x, b.location.y - building.location.y);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestId = b.entity_id;
+    }
+  }
+  return nearestId;
+}
+
+// Auto-routing: send outputs to storage and collect inputs from storage.
+// Only applies to buildings with auto_route !== false.
+// "Outputs" = output_buffer for recipe buildings, all inventory for mines.
+// "Inputs" = recipe input materials, collected from storage up to max_stock.
 function generateImpliedAdminOutpostTasks(store: WorldStore) {
   for (const building of store.buildings.values()) {
     if (building.status === "constructing") continue;
     if (building.class === "admin_outpost") continue;
-    if (building.class === "warehouse") continue; // warehouse inventory is the outpost; skip to avoid loops
+    if (building.class === "warehouse") continue;
+    if (building.auto_route === false) continue;
 
-    const player = store.players.get(building.owner_id);
-    if (!player) continue;
-    const account = player.map_accounts[building.map_key];
-    const outpostId = account?.admin_outpost_building_id;
-    if (!outpostId || outpostId === building.entity_id) continue;
+    const nearestStorageId = findNearestStorageForBuilding(store, building);
+    if (!nearestStorageId) continue;
 
-    // Find the nearest active storage node (warehouse or admin outpost) on this map
-    let nearestDestId = outpostId;
-    let nearestDist = Infinity;
-    for (const b of store.buildings.values()) {
-      if (b.owner_id !== building.owner_id) continue;
-      if (b.map_key !== building.map_key) continue;
-      if (b.status !== "active") continue;
-      if (b.class !== "admin_outpost" && b.class !== "warehouse") continue;
-      if (b.entity_id === building.entity_id) continue;
-      const dist = Math.hypot(b.location.x - building.location.x, b.location.y - building.location.y);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestDestId = b.entity_id;
-      }
+    const def = BUILDING_DEFS[building.class];
+    const recipe = def?.recipe;
+
+    // Determine which materials are outputs that should be sent to storage
+    const outputMaterials = new Set<MaterialType>();
+    if (recipe) {
+      // Recipe building: only the recipe output is an output
+      outputMaterials.add(recipe.output);
+    } else if (building.class === "mine" && building.resource_type) {
+      // Mine: the mined resource is its output
+      outputMaterials.add(building.resource_type as MaterialType);
     }
 
-    const destBuilding = store.buildings.get(nearestDestId);
-    if (!destBuilding) continue;
-
-    for (const res of MATERIAL_TYPES) {
-      if (res === "money") continue;
-
+    // --- Send OUTPUTS to nearest storage ---
+    for (const res of outputMaterials) {
       const available = (building.output_buffer?.[res] ?? 0) + (building.inventory[res] ?? 0);
       const buffer = building.buffer_stock?.[res] ?? 0;
       if (available - buffer <= 0) continue;
 
-      // Suppress implied route if there is an active user-configured route for this resource
+      // Suppress if there is an active user-configured route for this resource
       const hasActiveRoute = building.outgoing_routes?.some((route) => {
         const covers = route.resource === "all" || route.resource === res;
         if (!covers) return false;
@@ -504,25 +520,60 @@ function generateImpliedAdminOutpostTasks(store: WorldStore) {
       }) ?? false;
       if (hasActiveRoute) continue;
 
-      // Don't create a duplicate task
       const exists = taskExists(store, "pickup", (t: PickupTask) =>
         t.from_building_id === building.entity_id &&
-        t.to_building_id === nearestDestId &&
+        t.to_building_id === nearestStorageId &&
         t.resource === res
       );
       if (exists) continue;
 
       const taskId = `task_${++store.taskCounter}`;
-      const task: PickupTask = {
+      store.taskQueue.set(taskId, {
         id: taskId,
         type: "pickup",
         owner_id: building.owner_id,
         map_key: building.map_key,
         from_building_id: building.entity_id,
-        to_building_id: nearestDestId,
+        to_building_id: nearestStorageId,
         resource: res,
-      };
-      store.taskQueue.set(taskId, task);
+      } satisfies PickupTask);
+    }
+
+    // --- Collect INPUTS from nearest storage ---
+    if (recipe) {
+      const { inventoryBuilding: storageInv } = resolveStorageDest(
+        store.buildings.get(nearestStorageId)!, store
+      );
+
+      for (const inputMat of Object.keys(recipe.inputs) as MaterialType[]) {
+        // Don't collect if building is already at or above max_stock
+        const maxStock = building.max_stock?.[inputMat];
+        const current = building.inventory[inputMat] ?? 0;
+        if (maxStock !== undefined && current >= maxStock) continue;
+
+        // Only collect if storage actually has this material
+        const storageAvailable = storageInv.inventory[inputMat] ?? 0;
+        const storageBuffer = storageInv.buffer_stock?.[inputMat] ?? 0;
+        if (storageAvailable - storageBuffer <= 0) continue;
+
+        const exists = taskExists(store, "pickup", (t: PickupTask) =>
+          t.from_building_id === nearestStorageId &&
+          t.to_building_id === building.entity_id &&
+          t.resource === inputMat
+        );
+        if (exists) continue;
+
+        const taskId = `task_${++store.taskCounter}`;
+        store.taskQueue.set(taskId, {
+          id: taskId,
+          type: "pickup",
+          owner_id: building.owner_id,
+          map_key: building.map_key,
+          from_building_id: nearestStorageId,
+          to_building_id: building.entity_id,
+          resource: inputMat,
+        } satisfies PickupTask);
+      }
     }
   }
 }

@@ -26,6 +26,7 @@ const VALID_COMMAND_TYPES: Set<string> = new Set<CommandType>([
   "do_research",
   "set_buffer_stock",
   "set_max_stock",
+  "set_auto_route",
   "configure_quantum_rule",
   "delete_quantum_rule",
   "import",

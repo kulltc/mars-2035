@@ -148,6 +148,8 @@ export interface Building {
   outgoing_routes?: OutgoingRoute[];
   // Quantum relay rules: instant transfer to another relay each tick
   quantum_rules?: QuantumRelayRule[];
+  // Auto-route: send outputs to storage, collect inputs from storage (default true)
+  auto_route?: boolean;
   // Per-material minimum stock to keep (not shipped out by workers)
   buffer_stock?: Partial<Record<MaterialType, number>>;
   // Per-material maximum stock ceiling (won't accept deliveries above this)
@@ -341,7 +343,8 @@ export type CommandType =
   | "initiate_expansion"
   | "upsert_work_area"
   | "delete_work_area"
-  | "assign_worker_work_area";
+  | "assign_worker_work_area"
+  | "set_auto_route";
 
 export interface Command {
   id: string;

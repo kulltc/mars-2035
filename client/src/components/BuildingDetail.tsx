@@ -153,19 +153,22 @@ export function BuildingDetail() {
       b.entity_id !== building.entity_id
   );
   const used = totalInventory(building.inventory);
-  const pct = building.capacity > 0 ? Math.min(100, (used / building.capacity) * 100) : 0;
 
-  // Warehouse: look up the linked Admin Outpost and compute pooled capacity
+  // Compute pooled storage capacity (admin outpost + all active warehouses on same map)
+  const isStorageNode = building.class === "warehouse" || building.class === "admin_outpost";
   const warehouseOutpost = building.class === "warehouse"
     ? buildings.find((b) => b.entity_id === player?.map_accounts[building.map_key]?.admin_outpost_building_id) ?? null
     : null;
-  const warehousePooledCapacity = warehouseOutpost
-    ? warehouseOutpost.capacity + buildings
-        .filter((b) => b.class === "warehouse" && b.owner_id === building.owner_id && b.map_key === building.map_key && b.status === "active")
-        .reduce((sum, b) => sum + b.capacity, 0)
-    : 0;
-  const warehousePooledUsed = warehouseOutpost ? totalInventory(warehouseOutpost.inventory) : 0;
-  const warehousePooledPct = warehousePooledCapacity > 0 ? Math.min(100, (warehousePooledUsed / warehousePooledCapacity) * 100) : 0;
+  const pooledWarehouseCapacity = buildings
+    .filter((b) => b.class === "warehouse" && b.owner_id === building.owner_id && b.map_key === building.map_key && b.status === "active")
+    .reduce((sum, b) => sum + b.capacity, 0);
+  const pooledCapacity = isStorageNode
+    ? (building.class === "admin_outpost" ? building.capacity : (warehouseOutpost?.capacity ?? 0)) + pooledWarehouseCapacity
+    : building.capacity;
+  const pooledUsed = building.class === "warehouse" && warehouseOutpost
+    ? totalInventory(warehouseOutpost.inventory)
+    : used;
+  const pct = pooledCapacity > 0 ? Math.min(100, (pooledUsed / pooledCapacity) * 100) : 0;
 
   const getEffectiveRule = (res: ResourceType): AutoSellRule | null => {
     if (res in localAutoSell) return localAutoSell[res] ?? null;
@@ -253,25 +256,25 @@ export function BuildingDetail() {
             <>
               <div className="capacity-label">
                 <span>Pooled Storage (outpost + warehouses)</span>
-                <span className="mono">{warehousePooledUsed.toFixed(0)}/{warehousePooledCapacity}</span>
+                <span className="mono">{pooledUsed.toFixed(0)}/{pooledCapacity}</span>
               </div>
               <div className="capacity-bar">
                 <div
                   className="capacity-bar-fill"
                   style={{
-                    width: `${warehousePooledPct}%`,
-                    background: warehousePooledPct > 90 ? "var(--danger)" : warehousePooledPct > 60 ? "var(--warning)" : "var(--success)",
+                    width: `${pct}%`,
+                    background: pct > 90 ? "var(--danger)" : pct > 60 ? "var(--warning)" : "var(--success)",
                   }}
                 />
               </div>
             </>
           )}
         </div>
-      ) : building.capacity > 0 ? (
+      ) : pooledCapacity > 0 ? (
         <div style={{ marginTop: 8 }}>
           <div className="capacity-label">
-            <span>Storage</span>
-            <span className="mono">{used.toFixed(0)}/{building.capacity}</span>
+            <span>{building.class === "admin_outpost" && pooledWarehouseCapacity > 0 ? "Pooled Storage" : "Storage"}</span>
+            <span className="mono">{pooledUsed.toFixed(0)}/{pooledCapacity}</span>
           </div>
           <div className="capacity-bar">
             <div
@@ -451,6 +454,30 @@ export function BuildingDetail() {
             >
               Save Rule
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Auto Routing toggle */}
+      {(BUILDING_DEFS[building.class].recipe || building.class === "mine") && (
+        <div className="bd-section">
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={building.auto_route !== false}
+              onChange={(e) => {
+                submitCommand("set_auto_route", {
+                  building_id: building.entity_id,
+                  enabled: e.target.checked,
+                });
+              }}
+            />
+            Auto Routing
+          </label>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
+            {BUILDING_DEFS[building.class].recipe
+              ? "Collect inputs from storage, send outputs to storage"
+              : "Send mined resources to storage"}
           </div>
         </div>
       )}
@@ -998,7 +1025,7 @@ export function BuildingDetail() {
                             className="btn btn-accent btn-sm"
                             style={{ marginTop: 4 }}
                             onClick={async () => {
-                              const result = await submitCommand("do_research", { research_id: res.id });
+                              const result = await submitCommand("do_research", { research_id: res.id, map_key: building.map_key });
                               if (result.error) {
                                 addNotification(`Research failed: ${result.error}`, "error");
                               } else {

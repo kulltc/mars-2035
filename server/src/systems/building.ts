@@ -234,12 +234,14 @@ export async function placeBuilding(
     output_buffer: def.recipe ? {} : undefined,
   };
 
-  // Set default buffer_stock to 50% of capacity for each recipe input
+  // Set default buffer_stock and max_stock to 50% of capacity for each recipe input
   if (def.recipe) {
-    const bufferAmount = Math.round(capacity * 0.5);
+    const stockAmount = Math.round(capacity * 0.5);
     building.buffer_stock = {};
+    building.max_stock = {};
     for (const mat of Object.keys(def.recipe.inputs) as MaterialType[]) {
-      building.buffer_stock[mat] = bufferAmount;
+      building.buffer_stock[mat] = stockAmount;
+      building.max_stock[mat] = stockAmount;
     }
   }
 

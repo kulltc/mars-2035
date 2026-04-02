@@ -643,6 +643,10 @@ function createServer(): McpServer {
       research_id: z
         .string()
         .describe("Research ID to unlock (e.g. 'unlock_infra_tower', 'storage_buildings', 'foreign_affairs_1')"),
+      map_key: z
+        .string()
+        .optional()
+        .describe("Map key where the research lab is located. Materials will be deducted from this map's admin outpost."),
     },
     async (args, extra) => {
       return submitCmd(extra, "do_research", args as Record<string, unknown>);
